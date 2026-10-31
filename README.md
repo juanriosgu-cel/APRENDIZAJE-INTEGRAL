@@ -1,22 +1,16 @@
-# Analítica de talento humano — versión corregida
+# Aplicación integrada de analítica de talento humano
 
-Incluye la aplicación integrada con clasificación, regresión del ingreso, segmentación, EDA y metodología.
+## Ejecución local
+1. Instalar dependencias: `pip install -r requirements.txt`
+2. Ejecutar: `streamlit run app.py`
 
-## Archivos
-- `app.py`: aplicación Streamlit corregida.
-- `WA_Fn-UseC_-HR-Employee-Attrition.csv`: dataset requerido.
-- `requirements.txt`: dependencias.
+El archivo CSV debe permanecer en la misma carpeta que `app.py`.
 
-## Ejecutar localmente
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
+## Ajustes aplicados
+- Vista previa del resumen traducida al español (etiquetas visuales; nombres internos conservados).
+- Clasificación: resultados académicos validados en la tabla principal; Random Forest identificado como modelo final.
+- Matriz de confusión de Random Forest fijada a los conteos validados (TN=221, FP=26, FN=26, TP=21).
+- Métricas recalculadas, curvas y PCA identificados como análisis exploratorios de la partición actual.
+- Campos de predicción individual traducidos y salida de clase/probabilidad explícita.
 
-## Ajustes realizados
-- Traducción de las 35 variables de IBM HR Analytics en etiquetas visibles de clasificación; los nombres internos se conservan para compatibilidad.
-- Random Forest queda como modelo final seleccionado del estudio, sin ocultar las métricas comparativas recalculadas en la app.
-- Regresión: interpretación de R², MAE, RMSE, coeficientes y limitaciones; Ridge se presenta como alternativa ligeramente más robusta según el documento académico.
-- Segmentación: visualización PCA de los grupos, conteos y porcentajes por clúster, perfiles de medias e interpretación descriptiva por grupo para K-means, jerárquico y DBSCAN.
-
-Nota: las métricas calculadas por la aplicación pueden diferir de las reportadas en los documentos/notebooks por particiones, parámetros o procedimientos distintos.
+Regresión y segmentación se conservaron sin cambios intencionales.

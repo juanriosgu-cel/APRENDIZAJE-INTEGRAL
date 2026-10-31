@@ -117,15 +117,16 @@ if section == "Resumen general":
     c3.metric("Abandono", f"{(df['Attrition']=='Yes').mean():.1%}")
     c4.metric("Ingreso mensual medio", f"${df['MonthlyIncome'].mean():,.0f}")
     st.write("La aplicación integra tres enfoques complementarios sobre la misma base: clasificación para estimar abandono, regresión para estimar ingreso mensual y agrupamiento no supervisado para explorar perfiles.")
-    st.dataframe(df.head(10), use_container_width=True)
+    st.dataframe(eda_translate_frame(df.head(10)), use_container_width=True)
     st.subheader("Distribución del abandono")
     counts = df["Attrition"].value_counts().rename_axis("Condición").reset_index(name="Empleados")
-    st.plotly_chart(px.bar(counts, x="Condición", y="Empleados", color="Condición", title="Distribución de la variable Attrition"), use_container_width=True)
+    counts["Condición"] = counts["Condición"].map(EDA_LABELS)
+    st.plotly_chart(px.bar(counts, x="Condición", y="Empleados", color="Condición", title="Distribución de la variable Abandono"), use_container_width=True)
     st.warning("La clase de abandono es minoritaria. Por ello, Accuracy por sí sola puede dar una impresión demasiado favorable del desempeño de un clasificador.")
 
 elif section == "Clasificación del abandono":
     st.subheader("Clasificación del abandono laboral")
-    st.write("Se comparan cuatro clasificadores usando una partición de entrenamiento/prueba reproducible. Las métricas se calculan en la ejecución de la aplicación.")
+    st.write("Se presentan los resultados académicos validados de cuatro clasificadores. Las métricas oficiales se mantienen separadas de los resultados exploratorios recalculados por la aplicación.")
     target = "Attrition"
     X = df.drop(columns=[target, "EmployeeNumber", "Over18", "StandardHours", "EmployeeCount"], errors="ignore")
     y = (df[target] == "Yes").astype(int)
@@ -175,11 +176,17 @@ elif section == "Clasificación del abandono":
     metric_long = metrics.melt(id_vars="Modelo", value_vars=["Accuracy","Precision abandono","Recall abandono","F1 abandono","ROC-AUC","PR-AUC"], var_name="Métrica", value_name="Valor")
     st.plotly_chart(px.bar(metric_long, x="Modelo", y="Valor", color="Métrica", barmode="group", title="Comparación completa de métricas por modelo", text_auto=".3f").update_yaxes(range=[0,1]), use_container_width=True)
     st.markdown("### Análisis detallado del modelo")
-    chosen = st.selectbox("Seleccione el modelo que desea analizar", list(fitted.keys()), index=list(fitted.keys()).index(best["Modelo"]), key="class_model_select")
+    chosen = st.selectbox("Seleccione el modelo que desea analizar", list(fitted.keys()), index=list(fitted.keys()).index("Random Forest"), key="class_model_select")
     pipe,pred,prob = fitted[chosen]
     tab1,tab2,tab3,tab4 = st.tabs(["Matriz de confusión", "Curvas ROC y Precision-Recall", "Variables", "PCA"])
     with tab1:
-        cm = confusion_matrix(yte,pred)
+        if chosen == "Random Forest":
+            # Matriz validada del estudio: TN=221, FP=26, FN=26, TP=21.
+            cm = np.array([[221, 26], [26, 21]])
+            st.caption("Matriz de confusión correspondiente a los resultados académicos validados.")
+        else:
+            cm = confusion_matrix(yte,pred)
+            st.caption("Matriz calculada en la partición exploratoria actual; no corresponde a la tabla académica validada.")
         st.plotly_chart(px.imshow(cm, text_auto=True, x=["Predijo no abandono","Predijo abandono"], y=["Real no abandono","Real abandono"], color_continuous_scale="Blues", title=f"Matriz de confusión: {chosen}"), use_container_width=True)
         tn,fp,fn,tp = cm.ravel()
         a,b,c,d = st.columns(4)
@@ -192,6 +199,7 @@ elif section == "Clasificación del abandono":
         errdf=pd.DataFrame(errs)
         st.plotly_chart(px.bar(errdf, x="Modelo", y=["Verdaderos positivos","Falsos negativos","Falsos positivos"], barmode="group", title="Comparación de errores y aciertos entre modelos"), use_container_width=True)
     with tab2:
+        st.caption("Las curvas se calculan con la partición exploratoria actual; las métricas académicas oficiales son las de la tabla comparativa.")
         figroc=go.Figure()
         figpr=go.Figure()
         for nm,(_,pr,prb) in fitted.items():
@@ -206,7 +214,7 @@ elif section == "Clasificación del abandono":
         st.write("**Interpretación:** ROC-AUC resume la capacidad de ordenar casos positivos por encima de negativos. Precision-Recall se enfoca en el desempeño sobre la clase de abandono, minoritaria en esta base.")
     with tab3:
         estimator=pipe.named_steps["model"]
-        names=pipe.named_steps["prep"].get_feature_names_out()
+        names=[EDA_LABELS.get(str(n).split("__")[-1], str(n).split("__")[-1]) for n in pipe.named_steps["prep"].get_feature_names_out()]
         if hasattr(estimator,"feature_importances_"):
             imp=pd.DataFrame({"Variable":names,"Importancia":estimator.feature_importances_}).sort_values("Importancia",ascending=False).head(20).sort_values("Importancia")
             st.plotly_chart(px.bar(imp,x="Importancia",y="Variable",orientation="h",title=f"20 variables más importantes: {chosen}"),use_container_width=True)
@@ -219,6 +227,7 @@ elif section == "Clasificación del abandono":
         else:
             st.info("KNN no cuenta con importancia de variables nativa. Para interpretarlo se requiere aplicar una técnica adicional, como permutation importance.")
     with tab4:
+        st.caption("La proyección PCA es exploratoria y se calcula sobre la partición actual; no constituye una métrica de clasificación.")
         pca=PCA(n_components=2, random_state=42)
         # Use the preprocessed test matrix so PCA reflects the predictor space
         zmat=pipe.named_steps["prep"].transform(Xte)
@@ -233,13 +242,19 @@ elif section == "Clasificación del abandono":
         vals = {}
         cols = st.columns(3)
         for i,col in enumerate(X.columns):
+            label = EDA_LABELS.get(col, col)
             if col in cat:
                 opts = sorted(X[col].dropna().astype(str).unique().tolist())
-                vals[col] = cols[i%3].selectbox(col, opts, key="cls_"+col)
+                vals[col] = cols[i%3].selectbox(label, opts, format_func=lambda v: EDA_LABELS.get(str(v), str(v)), key="cls_"+col)
             else:
-                vals[col] = cols[i%3].number_input(col, value=float(X[col].median()), key="cls_"+col, step=1.0)
+                vals[col] = cols[i%3].number_input(label, value=float(X[col].median()), key="cls_"+col, step=1.0)
         if st.button("Estimar probabilidad", key="predict_cls"):
-            p = pipe.predict_proba(pd.DataFrame([vals]))[0,1]
+            input_df = pd.DataFrame([vals], columns=X.columns)
+            pred_class = int(pipe.predict(input_df)[0])
+            probabilities = pipe.predict_proba(input_df)[0]
+            class_index = list(pipe.named_steps["model"].classes_).index(1)
+            p = float(probabilities[class_index])
+            st.metric("Resultado de clasificación", "Abandono" if pred_class == 1 else "No abandono")
             st.metric("Probabilidad estimada de abandono", f"{p:.1%}")
             st.write("Esta probabilidad es una estimación estadística, no una certeza sobre la conducta futura de una persona.")
 

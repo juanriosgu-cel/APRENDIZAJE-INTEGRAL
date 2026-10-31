@@ -97,7 +97,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Clasificación del abandono, regresión del ingreso y segmentación de empleados | IBM HR Analytics")
-st.info("Aplicación académica para explorar resultados estadísticos. Las asociaciones observadas no demuestran causalidad ni deben usarse como única base para decisiones laborales.")
+st.info("Academic application for exploring statistical results. Observed associations do not demonstrate causality and should not be used as the sole basis for employment decisions.")
 
 with st.sidebar:
     st.header("Navegación")
@@ -160,7 +160,7 @@ elif section == "Clasificación del abandono":
     Xte_enc = pd.get_dummies(Xte, drop_first=True, dtype=np.uint8).reindex(columns=Xtr_enc.columns, fill_value=0)
 
     @st.cache_resource(show_spinner="Entrenando clasificadores (modo de bajo consumo)…")
-    def entrenar_clasificadores(X_train_data, X_test_data, y_train_data, y_test_data):
+    def entrenar_clasificadores(X_train_data, X_test_data, y_train_data, y_test_data, model_version):
         rows, fitted_models = [], {}
         # Hiperparámetros ganadores de GridSearchCV en el notebook ACA1.
         # Se fijan aquí para reproducir sus resultados sin volver a ejecutar
@@ -187,7 +187,7 @@ elif section == "Clasificación del abandono":
             })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte)
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_notebook_aligned_20261031_v2")
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -250,7 +250,10 @@ elif section == "Clasificación del abandono":
         pca=PCA(n_components=2, random_state=42)
         # Apply the same preprocessing used by the selected classifier.
         # Logistic Regression and KNN use StandardScaler; tree models use the encoded matrix directly.
-        zmat = pipe.named_steps["escalador"].transform(Xte_enc) if hasattr(pipe, "named_steps") else Xte_enc.to_numpy()
+        if isinstance(pipe, Pipeline) and "escalador" in pipe.named_steps:
+            zmat = pipe.named_steps["escalador"].transform(Xte_enc)
+        else:
+            zmat = Xte_enc.to_numpy(dtype=float)
         coords=pca.fit_transform(zmat)
         pcadf=pd.DataFrame({"Componente 1":coords[:,0],"Componente 2":coords[:,1],"Clase real":np.where(yte.to_numpy()==1,"Abandonó","Permanece"),"Predicción":np.where(pred==1,"Abandonó","Permanece")})
         st.plotly_chart(px.scatter(pcadf,x="Componente 1",y="Componente 2",color="Clase real",symbol="Predicción",title="PCA de los registros de prueba: clase real y predicción",opacity=.7),use_container_width=True)

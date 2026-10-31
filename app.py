@@ -258,7 +258,7 @@ elif section == "Clasificación del abandono":
         # Random Forest optimizado del notebook, reutilizado desde caché.
         rf_model = entrenar_random_forest(
             X_train_data, y_train_data,
-            model_version="ACA1_RF_gridsearch_best_20261031_v6"
+            model_version=f"ACA1_RF_gridsearch_best_20261031_v7_{HUELLA_BASE_ACTUAL}"
         )
         rf_pred = rf_model.predict(X_test_data)
         rf_prob = rf_model.predict_proba(X_test_data)[:, 1]
@@ -274,7 +274,7 @@ elif section == "Clasificación del abandono":
         })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_gridsearch_best_20261031_v6")
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version=f"ACA1_RF_gridsearch_best_20261031_v7_{HUELLA_BASE_ACTUAL}")
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -754,7 +754,7 @@ elif section == "Análisis exploratorio (EDA)":
         # Reutiliza el mismo Random Forest optimizado y cacheado del módulo principal.
         rf_eda = entrenar_random_forest(
             Xtrc_enc, ytrc,
-            model_version="ACA1_RF_gridsearch_best_20261031_v6"
+            model_version=f"ACA1_RF_gridsearch_best_20261031_v7_{HUELLA_BASE_ACTUAL}"
         )
         pred_rf_eda = rf_eda.predict(Xtec_enc)
         prob_rf_eda = rf_eda.predict_proba(Xtec_enc)[:, 1]

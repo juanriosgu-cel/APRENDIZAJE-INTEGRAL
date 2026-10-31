@@ -125,7 +125,7 @@ if section == "Resumen general":
 
 elif section == "Clasificación del abandono":
     st.subheader("Clasificación del abandono laboral")
-    st.write("Se comparan cuatro clasificadores con partición estratificada 80/20. Para reducir el consumo de memoria en el despliegue, se utilizan configuraciones controladas y entrenamiento secuencial; los resultados validados del estudio se presentan como referencia académica.")
+    st.write("Se comparan los cuatro clasificadores con la misma partición estratificada 80/20 y los hiperparámetros seleccionados en el notebook mediante validación cruzada. El entrenamiento es secuencial para controlar el consumo de memoria.")
     target = "Attrition"
     X = df.drop(columns=[target, "EmployeeNumber", "Over18", "StandardHours", "EmployeeCount"], errors="ignore")
     y = (df[target] == "Yes").astype(int)
@@ -136,11 +136,14 @@ elif section == "Clasificación del abandono":
     @st.cache_resource(show_spinner="Entrenando clasificadores (modo de bajo consumo)…")
     def entrenar_clasificadores(X_train_data, X_test_data, y_train_data, y_test_data):
         rows, fitted_models = [], {}
+        # Hiperparámetros ganadores de GridSearchCV en el notebook ACA1.
+        # Se fijan aquí para reproducir sus resultados sin volver a ejecutar
+        # una búsqueda exhaustiva en Streamlit Cloud.
         estimators = {
-            "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, class_weight="balanced", max_iter=1000, random_state=42))]),
-            "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=7, weights="distance", metric="manhattan", n_jobs=1))]),
-            "Árbol de decisión": DecisionTreeClassifier(max_depth=5, min_samples_leaf=2, class_weight="balanced", random_state=42),
-            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
+            "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, class_weight=None, max_iter=2000, random_state=42))]),
+            "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=3, weights="uniform", metric="manhattan", n_jobs=1))]),
+            "Árbol de Decisión": DecisionTreeClassifier(max_depth=10, min_samples_split=2, min_samples_leaf=5, class_weight=None, random_state=42),
+            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_split=2, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
         }
         for name, estimator in estimators.items():
             estimator.fit(X_train_data, y_train_data)
@@ -159,29 +162,22 @@ elif section == "Clasificación del abandono":
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
     fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte)
-    # Resultados validados del estudio: fuente oficial para la presentación académica.
-    metrics = pd.DataFrame([
-        {"Modelo":"Random Forest", "Accuracy":0.8231, "Precision abandono":0.4468, "Recall abandono":0.4468, "F1 abandono":0.4468, "F1 Macro":0.6708, "ROC-AUC":0.7482, "PR-AUC":0.3815},
-        {"Modelo":"Regresión Logística", "Accuracy":0.8605, "Precision abandono":0.6154, "Recall abandono":0.3404, "F1 abandono":0.4384, "F1 Macro":0.6794, "ROC-AUC":0.8079, "PR-AUC":0.5716},
-        {"Modelo":"Árbol de decisión", "Accuracy":0.8163, "Precision abandono":0.4146, "Recall abandono":0.3617, "F1 abandono":0.3864, "F1 Macro":0.6392, "ROC-AUC":0.6510, "PR-AUC":0.3444},
-        {"Modelo":"KNN", "Accuracy":0.8537, "Precision abandono":0.6111, "Recall abandono":0.2340, "F1 abandono":0.3385, "F1 Macro":0.6281, "ROC-AUC":0.6697, "PR-AUC":0.3407}
-    ])
+    # Métricas y matrices se calculan sobre las predicciones de los modelos
+    # configurados con los hiperparámetros del notebook.
+    metrics = execution_metrics.copy()
     best = metrics.loc[metrics["Modelo"] == "Random Forest"].iloc[0]
     c1,c2,c3,c4 = st.columns(4)
     c1.metric("Modelos comparados", len(metrics))
     c2.metric("Modelo final del estudio", "Random Forest", f"F1 {best['F1 abandono']:.4f}")
     c3.metric("Recall abandono", f"{best['Recall abandono']:.4f}")
     c4.metric("ROC-AUC", f"{best['ROC-AUC']:.4f}")
-    st.success("**Modelo final del estudio: Random Forest.** Presenta el mayor F1 para la clase abandono (0.4468) y Recall de 0.4468 en los resultados validados.")
-    st.markdown("### Comparación de modelos — resultados validados del estudio")
+    st.success(f"**Modelo final del estudio: Random Forest.** En esta ejecución obtuvo F1 de {best['F1 abandono']:.4f} y Recall de {best['Recall abandono']:.4f} para la clase abandono.")
+    st.markdown("### Comparación de modelos — resultados reproducidos del notebook")
     st.dataframe(metrics.style.format({c:"{:.4f}" for c in metrics.columns if c!="Modelo"}), use_container_width=True, hide_index=True)
-    with st.expander("Resultados recalculados en la ejecución actual (referencia exploratoria)"):
-        st.caption("Estos valores provienen de la partición reproducible ejecutada por la aplicación y no reemplazan los resultados validados del estudio.")
-        st.dataframe(execution_metrics.style.format({c:"{:.4f}" for c in execution_metrics.columns if c!="Modelo"}), use_container_width=True, hide_index=True)
     metric_long = metrics.melt(id_vars="Modelo", value_vars=["Accuracy","Precision abandono","Recall abandono","F1 abandono","ROC-AUC","PR-AUC"], var_name="Métrica", value_name="Valor")
     st.plotly_chart(px.bar(metric_long, x="Modelo", y="Valor", color="Métrica", barmode="group", title="Comparación completa de métricas por modelo", text_auto=".3f").update_yaxes(range=[0,1]), use_container_width=True)
     st.markdown("### Análisis detallado del modelo")
-    chosen = st.selectbox("Seleccione el modelo que desea analizar", list(fitted.keys()), index=list(fitted.keys()).index(best["Modelo"]), key="class_model_select")
+    chosen = st.selectbox("Seleccione el modelo que desea analizar", list(fitted.keys()), index=list(fitted.keys()).index(best["Modelo"]), key="class_model_select_v2")
     pipe,pred,prob = fitted[chosen]
     tab1,tab2,tab3,tab4 = st.tabs(["Matriz de confusión", "Curvas ROC y Precision-Recall", "Variables", "PCA"])
     with tab1:

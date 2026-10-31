@@ -240,7 +240,7 @@ elif section == "Clasificación del abandono":
         # Random Forest optimizado del notebook, reutilizado desde caché.
         rf_model = entrenar_random_forest(
             X_train_data, y_train_data,
-            model_version="ACA1_RF_gridsearch_best_20261031_v4"
+            model_version="ACA1_RF_gridsearch_best_20261031_v5"
         )
         rf_pred = rf_model.predict(X_test_data)
         rf_prob = rf_model.predict_proba(X_test_data)[:, 1]
@@ -256,7 +256,7 @@ elif section == "Clasificación del abandono":
         })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_gridsearch_best_20261031_v4")
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_gridsearch_best_20261031_v5")
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -736,7 +736,7 @@ elif section == "Análisis exploratorio (EDA)":
         # Reutiliza el mismo Random Forest optimizado y cacheado del módulo principal.
         rf_eda = entrenar_random_forest(
             Xtrc_enc, ytrc,
-            model_version="ACA1_RF_gridsearch_best_20261031_v4"
+            model_version="ACA1_RF_gridsearch_best_20261031_v5"
         )
         pred_rf_eda = rf_eda.predict(Xtec_enc)
         prob_rf_eda = rf_eda.predict_proba(Xtec_enc)[:, 1]
@@ -807,7 +807,7 @@ elif section == "Análisis exploratorio (EDA)":
         seg_pca=PCA(n_components=2,random_state=42)
         seg_coords=seg_pca.fit_transform(seg_z)
         seg_df=pd.DataFrame({"Componente 1":seg_coords[:,0],"Componente 2":seg_coords[:,1],"Grupo":seg_lab.astype(str),"Abandono":df["Attrition"].values})
-        fig_seg=px.scatter(seg_df,x="Componente 1",y="Componente 2",color="Grupo",symbol="Abandono",opacity=.72,title="Cinco grupos K-means proyectados mediante PCA",hover_data=["Attrition"],color_discrete_sequence=["#176B87","#64CCC5","#E76F51","#6C63A8","#E9C46A"])
+        fig_seg=px.scatter(seg_df,x="Componente 1",y="Componente 2",color="Grupo",symbol="Abandono",opacity=.72,title="Cinco grupos K-means proyectados mediante PCA",hover_data=["Abandono"],color_discrete_sequence=["#176B87","#64CCC5","#E76F51","#6C63A8","#E9C46A"])
         fig_seg.update_layout(template="plotly_white",title_x=.02,height=480,legend_title_text="Grupo")
         st.plotly_chart(fig_seg,use_container_width=True)
         seg_with_labels=df[seg_vars].copy()

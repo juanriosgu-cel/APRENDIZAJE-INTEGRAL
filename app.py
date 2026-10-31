@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -125,51 +125,33 @@ if section == "Resumen general":
 
 elif section == "Clasificación del abandono":
     st.subheader("Clasificación del abandono laboral")
-    st.write("Se comparan cuatro clasificadores con la misma partición estratificada 80/20 y optimización de hiperparámetros por F1 mediante validación cruzada estratificada, siguiendo el notebook.")
+    st.write("Se comparan cuatro clasificadores con partición estratificada 80/20. Para reducir el consumo de memoria en el despliegue, se utilizan configuraciones controladas y entrenamiento secuencial; los resultados validados del estudio se presentan como referencia académica.")
     target = "Attrition"
     X = df.drop(columns=[target, "EmployeeNumber", "Over18", "StandardHours", "EmployeeCount"], errors="ignore")
     y = (df[target] == "Yes").astype(int)
     Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-    # Configuración alineada con el notebook: codificación one-hot,
-    # partición estratificada 80/20 y optimización por F1 con CV estratificada.
-    from sklearn.model_selection import StratifiedKFold
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    Xtr_enc = pd.get_dummies(Xtr, drop_first=True, dtype=int)
-    Xte_enc = pd.get_dummies(Xte, drop_first=True, dtype=int).reindex(columns=Xtr_enc.columns, fill_value=0)
+    Xtr_enc = pd.get_dummies(Xtr, drop_first=True, dtype=np.uint8)
+    Xte_enc = pd.get_dummies(Xte, drop_first=True, dtype=np.uint8).reindex(columns=Xtr_enc.columns, fill_value=0)
 
-    grids = {
-        "Regresión Logística": (
-            Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(max_iter=2000, random_state=42))]),
-            {"modelo__C": [0.01, 0.1, 1, 10, 100], "modelo__class_weight": [None, "balanced"]}
-        ),
-        "KNN": (
-            Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier())]),
-            {"modelo__n_neighbors": [3, 5, 7, 9, 11], "modelo__weights": ["uniform", "distance"], "modelo__metric": ["euclidean", "manhattan"]}
-        ),
-        "Árbol de decisión": (
-            DecisionTreeClassifier(random_state=42),
-            {"max_depth": [3, 5, 7, 10, None], "min_samples_split": [2, 5, 10], "min_samples_leaf": [1, 2, 5, 10], "class_weight": [None, "balanced"]}
-        ),
-        "Random Forest": (
-            RandomForestClassifier(random_state=42, n_jobs=-1),
-            {"n_estimators": [100, 200], "max_depth": [None, 5, 10], "min_samples_split": [2, 5], "min_samples_leaf": [1, 2, 5], "class_weight": [None, "balanced"]}
-        )
-    }
-    @st.cache_resource(show_spinner="Optimizando clasificadores con validación cruzada…")
+    @st.cache_resource(show_spinner="Entrenando clasificadores (modo de bajo consumo)…")
     def entrenar_clasificadores(X_train_data, X_test_data, y_train_data, y_test_data):
         rows, fitted_models = [], {}
-        for name, (estimator, param_grid) in grids.items():
-            search = GridSearchCV(estimator=estimator, param_grid=param_grid, scoring="f1", cv=cv, n_jobs=-1, refit=True)
-            search.fit(X_train_data, y_train_data)
-            best_estimator = search.best_estimator_
-            pred = best_estimator.predict(X_test_data)
-            prob = best_estimator.predict_proba(X_test_data)[:, 1]
-            fitted_models[name] = (best_estimator, pred, prob)
+        estimators = {
+            "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, class_weight="balanced", max_iter=1000, random_state=42))]),
+            "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=7, weights="distance", metric="manhattan", n_jobs=1))]),
+            "Árbol de decisión": DecisionTreeClassifier(max_depth=5, min_samples_leaf=2, class_weight="balanced", random_state=42),
+            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
+        }
+        for name, estimator in estimators.items():
+            estimator.fit(X_train_data, y_train_data)
+            pred = estimator.predict(X_test_data)
+            prob = estimator.predict_proba(X_test_data)[:, 1]
+            fitted_models[name] = (estimator, pred, prob)
             rows.append({
                 "Modelo": name, "Accuracy": accuracy_score(y_test_data, pred),
-                "Precision abandono": precision_score(y_test_data, pred, pos_label=1, zero_division=0),
-                "Recall abandono": recall_score(y_test_data, pred, pos_label=1, zero_division=0),
-                "F1 abandono": f1_score(y_test_data, pred, pos_label=1, zero_division=0),
+                "Precision abandono": precision_score(y_test_data, pred, zero_division=0),
+                "Recall abandono": recall_score(y_test_data, pred, zero_division=0),
+                "F1 abandono": f1_score(y_test_data, pred, zero_division=0),
                 "F1 Macro": f1_score(y_test_data, pred, average="macro", zero_division=0),
                 "ROC-AUC": roc_auc_score(y_test_data, prob),
                 "PR-AUC": average_precision_score(y_test_data, prob)
@@ -636,7 +618,7 @@ elif section == "Análisis exploratorio (EDA)":
             "Regresión Logística": LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42),
             "KNN": KNeighborsClassifier(n_neighbors=7),
             "Árbol de decisión": DecisionTreeClassifier(max_depth=5, class_weight="balanced", random_state=42),
-            "Random Forest": RandomForestClassifier(n_estimators=250, class_weight="balanced", random_state=42, min_samples_leaf=2)
+            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, class_weight="balanced", random_state=42, min_samples_leaf=2, n_jobs=1)
         }
         cls_rows=[]; cls_fitted={}
         for nm, estimator in cls_models.items():

@@ -97,26 +97,26 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Clasificación del abandono, regresión del ingreso y segmentación de empleados | IBM HR Analytics")
-st.info("Academic application for exploring statistical results. Observed associations do not demonstrate causality and should not be used as the sole basis for employment decisions.")
+st.info("Aplicación académica para explorar resultados estadísticos. Las asociaciones observadas no demuestran causalidad ni deben utilizarse como única base para tomar decisiones laborales.")
 
 with st.sidebar:
     st.header("Navegación")
     section = st.radio("Seleccione el módulo", [
-        "General summary", "Análisis exploratorio (EDA)", "Clasificación del abandono", "Regresión del ingreso", "Segmentación de empleados", "Metodología y limitaciones"
+        "Resumen general", "Análisis exploratorio (EDA)", "Clasificación del abandono", "Regresión del ingreso", "Segmentación de empleados", "Metodología y limitaciones"
     ])
     st.divider()
     st.caption("Base de datos IBM HR Analytics")
     st.write(f"Registros: **{len(df):,}**")
     st.write(f"Variables: **{df.shape[1]}**")
 
-if section == "General summary":
-    st.subheader("Dataset overview")
+if section == "Resumen general":
+    st.subheader("Resumen de la base de datos")
     c1,c2,c3,c4 = st.columns(4)
-    c1.metric("Employees", f"{len(df):,}")
+    c1.metric("Empleados", f"{len(df):,}")
     c2.metric("Variables", df.shape[1])
-    c3.metric("Attrition", f"{(df['Attrition']=='Yes').mean():.1%}")
-    c4.metric("Average monthly income", f"${df['MonthlyIncome'].mean():,.0f}")
-    st.write("The application integrates three complementary approaches using the same dataset: classification to predict employee attrition, regression to estimate monthly income, and unsupervised clustering to explore employee profiles.")
+    c3.metric("Abandono", f"{(df['Attrition']=='Yes').mean():.1%}")
+    c4.metric("Ingreso mensual promedio", f"${df['MonthlyIncome'].mean():,.0f}")
+    st.write("La aplicación integra tres enfoques complementarios sobre la misma base de datos: clasificación para estimar el abandono laboral, regresión para estimar el ingreso mensual y agrupamiento no supervisado para explorar perfiles de empleados.")
     summary_df = df.head(10).copy()
     summary_df.columns = [EDA_LABELS.get(str(c), str(c)) for c in summary_df.columns]
     summary_df = summary_df.rename(columns={
@@ -169,7 +169,7 @@ elif section == "Clasificación del abandono":
             "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, penalty="l2", max_iter=2000, random_state=42))]),
             "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=3, metric="manhattan"))]),
             "Árbol de Decisión": DecisionTreeClassifier(max_depth=10, min_samples_leaf=5, random_state=42),
-            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
+            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_split=2, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
         }
         for name, estimator in estimators.items():
             estimator.fit(X_train_data, y_train_data)
@@ -187,7 +187,7 @@ elif section == "Clasificación del abandono":
             })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_notebook_aligned_20261031_v2")
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_notebook_aligned_20261031_v3_cache_refresh")
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -641,7 +641,7 @@ elif section == "Análisis exploratorio (EDA)":
             "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, penalty="l2", max_iter=2000, random_state=42))]),
             "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=3, metric="manhattan"))]),
             "Árbol de Decisión": DecisionTreeClassifier(max_depth=10, min_samples_leaf=5, random_state=42),
-            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
+            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_split=2, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
         }
         cls_rows=[]; cls_fitted={}
         for nm, estimator in cls_models.items():

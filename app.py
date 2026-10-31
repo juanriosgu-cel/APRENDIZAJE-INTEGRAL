@@ -119,22 +119,7 @@ if section == "Resumen general":
     st.write("La aplicación integra tres enfoques complementarios sobre la misma base de datos: clasificación para estimar el abandono laboral, regresión para estimar el ingreso mensual y agrupamiento no supervisado para explorar perfiles de empleados.")
     summary_df = df.head(10).copy()
     summary_df.columns = [EDA_LABELS.get(str(c), str(c)) for c in summary_df.columns]
-    summary_df = summary_df.rename(columns={
-        "Edad":"Age", "Abandono":"Abandono", "Frecuencia de viajes laborales":"Business travel",
-        "Tarifa diaria":"Daily rate", "Departamento":"Department", "Distancia desde el hogar":"Distance from home",
-        "Nivel educativo":"Education", "Campo de formación":"Education field", "Conteo de empleados":"Employee count",
-        "Número de empleado":"Employee number", "Satisfacción con el entorno laboral":"Environment satisfaction",
-        "Género":"Gender", "Tarifa por hora":"Hourly rate", "Involucramiento laboral":"Job involvement",
-        "Nivel del cargo":"Job level", "Cargo":"Job role", "Satisfacción laboral":"Job satisfaction",
-        "Estado civil":"Marital status", "Ingreso mensual":"Monthly income", "Tarifa mensual":"Monthly rate",
-        "Número de empresas en las que ha trabajado":"Companies worked", "Horas extra":"Overtime",
-        "Porcentaje de incremento salarial":"Percent salary hike", "Calificación de desempeño":"Performance rating",
-        "Satisfacción con las relaciones laborales":"Relationship satisfaction", "Horas estándar":"Standard hours",
-        "Nivel de opciones sobre acciones":"Stock option level", "Experiencia laboral total":"Total working years",
-        "Capacitaciones realizadas el último año":"Training times last year", "Equilibrio entre vida laboral y personal":"Work-life balance",
-        "Antigüedad en la empresa":"Years at company", "Antigüedad en el cargo actual":"Years in current role",
-        "Años desde el último ascenso":"Years since last promotion", "Antigüedad con el jefe actual":"Years with current manager"
-    })
+    # Mantener los encabezados del resumen general en español.
     value_translation = {"Sí":"Yes", "No":"No", "Masculino":"Male", "Femenino":"Female",
         "Ventas":"Sales", "Investigación y desarrollo":"Research & Development",
         "Recursos humanos":"Human Resources", "Ciencias de la vida":"Life Sciences",
@@ -187,22 +172,19 @@ elif section == "Clasificación del abandono":
         # Random Forest: usar la búsqueda de hiperparámetros definida en ACA1,
         # no una configuración manual distinta. Se ejecuta secuencialmente para
         # controlar memoria y se cachea el resultado.
-        rf_grid = GridSearchCV(
-            RandomForestClassifier(random_state=42, n_jobs=1),
-            {
-                "n_estimators": [100, 200],
-                "max_depth": [None, 5, 10],
-                "min_samples_split": [2, 5],
-                "min_samples_leaf": [1, 2, 5],
-                "class_weight": [None, "balanced"]
-            },
-            scoring="f1",
-            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
-            n_jobs=1,
-            refit=True
+        # Hiperparámetros óptimos registrados en el notebook ACA1.
+        # Se usa el estimador final directamente para evitar una GridSearch
+        # repetida en Streamlit Cloud y reproducir la matriz del notebook.
+        rf_model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=5,
+            min_samples_split=2,
+            min_samples_leaf=2,
+            class_weight="balanced",
+            random_state=42,
+            n_jobs=1
         )
-        rf_grid.fit(X_train_data, y_train_data)
-        rf_model = rf_grid.best_estimator_
+        rf_model.fit(X_train_data, y_train_data)
         rf_pred = rf_model.predict(X_test_data)
         rf_prob = rf_model.predict_proba(X_test_data)[:, 1]
         fitted_models["Random Forest"] = (rf_model, rf_pred, rf_prob)
@@ -217,7 +199,7 @@ elif section == "Clasificación del abandono":
         })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_gridsearch_notebook_20261101_v1")
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_best_params_notebook_20261101_v3")
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -228,7 +210,7 @@ elif section == "Clasificación del abandono":
     c3.metric("Recall abandono", f"{best['Recall abandono']:.4f}")
     c4.metric("ROC-AUC", f"{best['ROC-AUC']:.4f}")
     st.success(f"**Modelo final del estudio: Random Forest.** En esta ejecución obtuvo F1 de {best['F1 abandono']:.4f} y Recall de {best['Recall abandono']:.4f} para la clase abandono.")
-    st.markdown("### Model comparison — notebook-aligned model configurations")
+    st.markdown("### Comparación de modelos: configuraciones alineadas con el notebook")
     st.dataframe(metrics.style.format({c:"{:.4f}" for c in metrics.columns if c!="Modelo"}), use_container_width=True, hide_index=True)
     metric_long = metrics.melt(id_vars="Modelo", value_vars=["Accuracy","Precision abandono","Recall abandono","F1 abandono","ROC-AUC","PR-AUC"], var_name="Métrica", value_name="Valor")
     st.plotly_chart(px.bar(metric_long, x="Modelo", y="Valor", color="Métrica", barmode="group", title="Comparación completa de métricas por modelo", text_auto=".3f").update_yaxes(range=[0,1]), use_container_width=True)
@@ -562,21 +544,21 @@ elif section == "Análisis exploratorio (EDA)":
         st.dataframe(eda_translate_frame(desc), use_container_width=True)
         st.markdown("### Distribuciones numéricas")
         selected_num = st.selectbox("Seleccione una variable numérica", num_cols, format_func=lambda v: EDA_LABELS.get(v, v), key="eda_num_dist")
-        st.plotly_chart(px.histogram(df, x=selected_num, color="Abandono", marginal="box", barmode="overlay", opacity=.65, title=f"Distribución de {EDA_LABELS.get(selected_num, selected_num)} según abandono", labels=EDA_LABELS), use_container_width=True)
+        st.plotly_chart(px.histogram(df, x=selected_num, color="Attrition", marginal="box", barmode="overlay", opacity=.65, title=f"Distribución de {EDA_LABELS.get(selected_num, selected_num)} según abandono", labels=EDA_LABELS), use_container_width=True)
 
     with tab3:
         st.markdown("### Variables numéricas según condición de abandono")
         num_compare = [c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears", "DistanceFromHome", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager"] if c in df.columns]
         selected_compare = st.multiselect("Variables numéricas para comparar", num_compare, default=[c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears"] if c in num_compare], format_func=lambda v: EDA_LABELS.get(v, v), key="eda_num_compare")
         if selected_compare:
-            medians = df.groupby("Abandono")[selected_compare].median().T.reset_index(names="Variable")
-            means = df.groupby("Abandono")[selected_compare].mean().T.reset_index(names="Variable")
+            medians = df.groupby("Attrition")[selected_compare].median().T.reset_index(names="Variable")
+            means = df.groupby("Attrition")[selected_compare].mean().T.reset_index(names="Variable")
             st.markdown("**Medianas por condición**")
             st.dataframe(eda_translate_frame(medians), use_container_width=True, hide_index=True)
             st.markdown("**Medias por condición**")
             st.dataframe(eda_translate_frame(means.round(2)), use_container_width=True, hide_index=True)
-            melted = df.melt(id_vars="Abandono", value_vars=selected_compare, var_name="Variable", value_name="Valor")
-            st.plotly_chart(px.box(melted, x="Variable", y="Valor", color="Abandono", facet_col="Variable", facet_col_wrap=2, title="Distribuciones numéricas según abandono", points=False, labels=EDA_LABELS), use_container_width=True)
+            melted = df.melt(id_vars="Attrition", value_vars=selected_compare, var_name="Variable", value_name="Valor")
+            st.plotly_chart(px.box(melted, x="Variable", y="Valor", color="Attrition", facet_col="Variable", facet_col_wrap=2, title="Distribuciones numéricas según abandono", points=False, labels=EDA_LABELS), use_container_width=True)
         st.markdown("### Tasa de abandono por categoría")
         cat_candidates = [c for c in ["OverTime", "BusinessTravel", "JobSatisfaction", "EnvironmentSatisfaction", "JobInvolvement", "WorkLifeBalance", "JobLevel", "Department", "JobRole", "MaritalStatus", "StockOptionLevel"] if c in df.columns]
         cat_var = st.selectbox("Seleccione una variable categórica", cat_candidates, index=cat_candidates.index("OverTime") if "OverTime" in cat_candidates else 0, format_func=lambda v: EDA_LABELS.get(v, v), key="eda_cat_rate")
@@ -605,14 +587,14 @@ elif section == "Análisis exploratorio (EDA)":
         pair_vars = [c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears"] if c in df.columns]
         pair_x = st.selectbox("Variable del eje X", pair_vars, index=0, key="eda_pair_x")
         pair_y = st.selectbox("Variable del eje Y", [c for c in pair_vars if c != pair_x], index=0, key="eda_pair_y")
-        st.plotly_chart(px.scatter(df, x=pair_x, y=pair_y, color="Abandono", opacity=.65, title=f"{EDA_LABELS.get(pair_y,pair_y)} frente a {EDA_LABELS.get(pair_x,pair_x)}, según abandono", labels=EDA_LABELS), use_container_width=True)
+        st.plotly_chart(px.scatter(df, x=pair_x, y=pair_y, color="Attrition", opacity=.65, title=f"{EDA_LABELS.get(pair_y,pair_y)} frente a {EDA_LABELS.get(pair_x,pair_x)}, según abandono", labels=EDA_LABELS), use_container_width=True)
         st.markdown("### Matriz de dispersión de variables principales")
         st.caption("Permite explorar simultáneamente las relaciones entre edad, ingreso mensual, antigüedad y experiencia, diferenciando la condición de abandono.")
         st.plotly_chart(
             px.scatter_matrix(
                 df,
                 dimensions=pair_vars,
-                color="Abandono",
+                color="Attrition",
                 opacity=0.55,
                 title="Matriz de dispersión: variables principales y abandono",
                 labels=EDA_LABELS
@@ -679,18 +661,17 @@ elif section == "Análisis exploratorio (EDA)":
             prob_cls=estimator.predict_proba(Xtec_enc)[:,1]
             cls_fitted[nm]=(pred_cls,prob_cls)
             cls_rows.append({"Modelo":nm,"Precision abandono":precision_score(ytec,pred_cls,zero_division=0),"Recall abandono":recall_score(ytec,pred_cls,zero_division=0),"F1 abandono":f1_score(ytec,pred_cls,zero_division=0),"ROC-AUC":roc_auc_score(ytec,prob_cls)})
-        rf_grid_eda = GridSearchCV(
-            RandomForestClassifier(random_state=42, n_jobs=1),
-            {
-                "n_estimators": [100, 200], "max_depth": [None, 5, 10],
-                "min_samples_split": [2, 5], "min_samples_leaf": [1, 2, 5],
-                "class_weight": [None, "balanced"]
-            }, scoring="f1",
-            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
-            n_jobs=1, refit=True
+        # Mismos hiperparámetros optimizados del notebook ACA1.
+        rf_eda = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=5,
+            min_samples_split=2,
+            min_samples_leaf=2,
+            class_weight="balanced",
+            random_state=42,
+            n_jobs=1
         )
-        rf_grid_eda.fit(Xtrc_enc, ytrc)
-        rf_eda = rf_grid_eda.best_estimator_
+        rf_eda.fit(Xtrc_enc, ytrc)
         pred_rf_eda = rf_eda.predict(Xtec_enc)
         prob_rf_eda = rf_eda.predict_proba(Xtec_enc)[:, 1]
         cls_fitted["Random Forest"] = (pred_rf_eda, prob_rf_eda)
@@ -766,7 +747,7 @@ elif section == "Análisis exploratorio (EDA)":
         st.caption(f"La proyección PCA representa {seg_pca.explained_variance_ratio_.sum():.1%} de la varianza estandarizada en dos dimensiones. Los grupos son exploratorios; no constituyen una evaluación de los empleados.")
 
     st.markdown("### Principales hallazgos de la EDA")
-    med = df.groupby("Abandono")[[c for c in ["YearsAtCompany", "MonthlyIncome", "Age"] if c in df.columns]].median()
+    med = df.groupby("Attrition")[[c for c in ["YearsAtCompany", "MonthlyIncome", "Age"] if c in df.columns]].median()
     overtime_rates = (df.assign(_abandono=(df["Attrition"]=="Yes").astype(int)).groupby("OverTime")['_abandono'].mean()*100) if "OverTime" in df.columns else pd.Series(dtype=float)
     c_yes = float((df["Attrition"]=="Yes").mean()*100)
     st.write(f"- El abandono representa **{c_yes:.2f}%** de los registros ({n_yes:,} empleados).")

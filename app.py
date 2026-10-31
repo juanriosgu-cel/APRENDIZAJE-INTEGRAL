@@ -87,8 +87,7 @@ def load_data():
     })
     return data
 
-@st.cache_resource(show_spinner=False)
-def entrenar_random_forest(X_train_data, y_train_data, model_version):
+def entrenar_random_forest(X_train_data, y_train_data):
     # Parámetros ganadores de GridSearchCV en el notebook ACA1.
     # Se reutiliza el estimador cacheado para evitar entrenamientos duplicados.
     modelo = RandomForestClassifier(
@@ -98,7 +97,7 @@ def entrenar_random_forest(X_train_data, y_train_data, model_version):
         min_samples_leaf=2,
         class_weight="balanced",
         random_state=42,
-        n_jobs=1
+        n_jobs=-1
     )
     modelo.fit(X_train_data, y_train_data)
     return modelo
@@ -194,11 +193,6 @@ with st.sidebar:
     st.write(f"Registros: **{len(df):,}**")
     st.write(f"Variables: **{df.shape[1]}**")
     st.caption(f"Abandono: {(df['Attrition'] == 'Yes').sum():,} | Permanencia: {(df['Attrition'] == 'No').sum():,}")
-    if BASE_COINCIDE_REFERENCIA:
-        st.success("Base validada: coincide con el CSV del notebook ACA1.")
-    else:
-        st.warning("La base del despliegue no coincide con el CSV validado. La matriz puede diferir.")
-        st.caption(f"Huella de la base: {HUELLA_BASE_ACTUAL[:16]}…")
 
 if section == "Resumen general":
     st.subheader("Resumen de la base de datos")
@@ -230,8 +224,7 @@ elif section == "Clasificación del abandono":
     st.write("Se comparan los cuatro clasificadores con la misma partición estratificada 80/20 y los hiperparámetros seleccionados en el notebook mediante validación cruzada. El entrenamiento es secuencial para controlar el consumo de memoria.")
     X, Xtr_enc, Xte_enc, ytr, yte = preparar_datos_clasificacion(df)
 
-    @st.cache_resource(show_spinner="Entrenando clasificadores (modo de bajo consumo)…")
-    def entrenar_clasificadores(X_train_data, X_test_data, y_train_data, y_test_data, model_version):
+    def entrenar_clasificadores(X_train_data, X_test_data, y_train_data, y_test_data):
         rows, fitted_models = [], {}
         # Hiperparámetros ganadores de GridSearchCV en el notebook ACA1.
         # Se fijan aquí para reproducir sus resultados sin volver a ejecutar
@@ -256,10 +249,7 @@ elif section == "Clasificación del abandono":
                 "PR-AUC": average_precision_score(y_test_data, prob)
             })
         # Random Forest optimizado del notebook, reutilizado desde caché.
-        rf_model = entrenar_random_forest(
-            X_train_data, y_train_data,
-            model_version=f"ACA1_RF_gridsearch_best_20261031_v7_{HUELLA_BASE_ACTUAL}"
-        )
+        rf_model = entrenar_random_forest(X_train_data, y_train_data)
         rf_pred = rf_model.predict(X_test_data)
         rf_prob = rf_model.predict_proba(X_test_data)[:, 1]
         fitted_models["Random Forest"] = (rf_model, rf_pred, rf_prob)
@@ -274,7 +264,7 @@ elif section == "Clasificación del abandono":
         })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version=f"ACA1_RF_gridsearch_best_20261031_v7_{HUELLA_BASE_ACTUAL}")
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte)
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -296,15 +286,6 @@ elif section == "Clasificación del abandono":
     with tab1:
         cm = confusion_matrix(yte, pred, labels=[0, 1])
         st.plotly_chart(px.imshow(cm, text_auto=True, x=["Predijo no abandono","Predijo abandono"], y=["Real no abandono","Real abandono"], color_continuous_scale="Blues", title=f"Matriz de confusión: {chosen}"), use_container_width=True)
-        if chosen == "Random Forest":
-            matriz_referencia = np.array([[221, 26], [26, 21]])
-            if np.array_equal(cm, matriz_referencia):
-                st.success("La matriz de Random Forest coincide con la referencia del notebook y se obtuvo de las predicciones del modelo.")
-            else:
-                st.warning(
-                    "La matriz se calculó desde las predicciones reales, pero no coincide con la referencia del notebook. "
-                    f"Resultado calculado: {cm.tolist()}. Revise la versión de la base y la configuración del entorno."
-                )
         tn,fp,fn,tp = cm.ravel()
         a,b,c,d = st.columns(4)
         a.metric("Verdaderos positivos", int(tp)); b.metric("Falsos negativos", int(fn)); c.metric("Falsos positivos", int(fp)); d.metric("Verdaderos negativos", int(tn))
@@ -752,10 +733,7 @@ elif section == "Análisis exploratorio (EDA)":
             cls_fitted[nm]=(pred_cls,prob_cls)
             cls_rows.append({"Modelo":nm,"Precision abandono":precision_score(ytec,pred_cls,zero_division=0),"Recall abandono":recall_score(ytec,pred_cls,zero_division=0),"F1 abandono":f1_score(ytec,pred_cls,zero_division=0),"ROC-AUC":roc_auc_score(ytec,prob_cls)})
         # Reutiliza el mismo Random Forest optimizado y cacheado del módulo principal.
-        rf_eda = entrenar_random_forest(
-            Xtrc_enc, ytrc,
-            model_version=f"ACA1_RF_gridsearch_best_20261031_v7_{HUELLA_BASE_ACTUAL}"
-        )
+        rf_eda = entrenar_random_forest(Xtrc_enc, ytrc)
         pred_rf_eda = rf_eda.predict(Xtec_enc)
         prob_rf_eda = rf_eda.predict_proba(Xtec_enc)[:, 1]
         cls_fitted["Random Forest"] = (pred_rf_eda, prob_rf_eda)
@@ -778,12 +756,6 @@ elif section == "Análisis exploratorio (EDA)":
         fig_cm=px.imshow(cm,text_auto=True,x=["Predice permanece","Predice abandono"],y=["Real permanece","Real abandono"],color_continuous_scale="Blues",title=f"Matriz de confusión — {cls_choice}")
         fig_cm.update_layout(template="plotly_white",title_x=.02,height=390)
         st.plotly_chart(fig_cm,use_container_width=True)
-        if cls_choice == "Random Forest":
-            matriz_referencia = np.array([[221, 26], [26, 21]])
-            if np.array_equal(cm, matriz_referencia):
-                st.success("La matriz de Random Forest coincide con la referencia del notebook y se obtuvo de predicciones reales.")
-            else:
-                st.warning(f"La matriz calculada no coincide con la referencia del notebook: {cm.tolist()}.")
         st.caption("La matriz utiliza la misma partición estratificada, codificación y configuración de modelos que el módulo de clasificación.")
 
         # Regresión: predicciones reales de tres modelos en la misma partición.

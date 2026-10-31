@@ -102,26 +102,52 @@ st.info("Aplicación académica para explorar resultados estadísticos. Las asoc
 with st.sidebar:
     st.header("Navegación")
     section = st.radio("Seleccione el módulo", [
-        "Resumen general", "Análisis exploratorio (EDA)", "Clasificación del abandono", "Regresión del ingreso", "Segmentación de empleados", "Metodología y limitaciones"
+        "General summary", "Análisis exploratorio (EDA)", "Clasificación del abandono", "Regresión del ingreso", "Segmentación de empleados", "Metodología y limitaciones"
     ])
     st.divider()
     st.caption("Base de datos IBM HR Analytics")
     st.write(f"Registros: **{len(df):,}**")
     st.write(f"Variables: **{df.shape[1]}**")
 
-if section == "Resumen general":
-    st.subheader("Vista general de la base")
+if section == "General summary":
+    st.subheader("Dataset overview")
     c1,c2,c3,c4 = st.columns(4)
-    c1.metric("Empleados", f"{len(df):,}")
+    c1.metric("Employees", f"{len(df):,}")
     c2.metric("Variables", df.shape[1])
-    c3.metric("Abandono", f"{(df['Attrition']=='Yes').mean():.1%}")
-    c4.metric("Ingreso mensual medio", f"${df['MonthlyIncome'].mean():,.0f}")
-    st.write("La aplicación integra tres enfoques complementarios sobre la misma base: clasificación para estimar abandono, regresión para estimar ingreso mensual y agrupamiento no supervisado para explorar perfiles.")
-    st.dataframe(df.head(10), use_container_width=True)
-    st.subheader("Distribución del abandono")
-    counts = df["Attrition"].value_counts().rename_axis("Condición").reset_index(name="Empleados")
-    st.plotly_chart(px.bar(counts, x="Condición", y="Empleados", color="Condición", title="Distribución de la variable Attrition"), use_container_width=True)
-    st.warning("La clase de abandono es minoritaria. Por ello, Accuracy por sí sola puede dar una impresión demasiado favorable del desempeño de un clasificador.")
+    c3.metric("Attrition", f"{(df['Attrition']=='Yes').mean():.1%}")
+    c4.metric("Average monthly income", f"${df['MonthlyIncome'].mean():,.0f}")
+    st.write("The application integrates three complementary approaches using the same dataset: classification to predict employee attrition, regression to estimate monthly income, and unsupervised clustering to explore employee profiles.")
+    summary_df = df.head(10).copy()
+    summary_df.columns = [EDA_LABELS.get(str(c), str(c)) for c in summary_df.columns]
+    summary_df = summary_df.rename(columns={
+        "Edad":"Age", "Abandono":"Attrition", "Frecuencia de viajes laborales":"Business travel",
+        "Tarifa diaria":"Daily rate", "Departamento":"Department", "Distancia desde el hogar":"Distance from home",
+        "Nivel educativo":"Education", "Campo de formación":"Education field", "Conteo de empleados":"Employee count",
+        "Número de empleado":"Employee number", "Satisfacción con el entorno laboral":"Environment satisfaction",
+        "Género":"Gender", "Tarifa por hora":"Hourly rate", "Involucramiento laboral":"Job involvement",
+        "Nivel del cargo":"Job level", "Cargo":"Job role", "Satisfacción laboral":"Job satisfaction",
+        "Estado civil":"Marital status", "Ingreso mensual":"Monthly income", "Tarifa mensual":"Monthly rate",
+        "Número de empresas en las que ha trabajado":"Companies worked", "Horas extra":"Overtime",
+        "Porcentaje de incremento salarial":"Percent salary hike", "Calificación de desempeño":"Performance rating",
+        "Satisfacción con las relaciones laborales":"Relationship satisfaction", "Horas estándar":"Standard hours",
+        "Nivel de opciones sobre acciones":"Stock option level", "Experiencia laboral total":"Total working years",
+        "Capacitaciones realizadas el último año":"Training times last year", "Equilibrio entre vida laboral y personal":"Work-life balance",
+        "Antigüedad en la empresa":"Years at company", "Antigüedad en el cargo actual":"Years in current role",
+        "Años desde el último ascenso":"Years since last promotion", "Antigüedad con el jefe actual":"Years with current manager"
+    })
+    value_translation = {"Sí":"Yes", "No":"No", "Masculino":"Male", "Femenino":"Female",
+        "Ventas":"Sales", "Investigación y desarrollo":"Research & Development",
+        "Recursos humanos":"Human Resources", "Ciencias de la vida":"Life Sciences",
+        "Ciencias médicas":"Medical", "Mercadeo":"Marketing", "Otro":"Other",
+        "Viajes ocasionales":"Travel_Rarely", "Viajes frecuentes":"Travel_Frequently", "Sin viajes":"Non-Travel"}
+    for col in summary_df.select_dtypes(include=["object"]).columns:
+        summary_df[col] = summary_df[col].replace(value_translation)
+    st.dataframe(summary_df, use_container_width=True)
+    st.subheader("Attrition distribution")
+    counts = df["Attrition"].value_counts().rename_axis("Attrition").reset_index(name="Employees")
+    counts["Attrition"] = counts["Attrition"].replace({"Yes":"Attrition", "No":"Stayed"})
+    st.plotly_chart(px.bar(counts, x="Attrition", y="Employees", color="Attrition", title="Distribution of employee attrition"), use_container_width=True)
+    st.warning("Attrition is the minority class. Accuracy alone may therefore give an overly favorable impression of a classifier's performance.")
 
 elif section == "Clasificación del abandono":
     st.subheader("Clasificación del abandono laboral")
@@ -140,10 +166,10 @@ elif section == "Clasificación del abandono":
         # Se fijan aquí para reproducir sus resultados sin volver a ejecutar
         # una búsqueda exhaustiva en Streamlit Cloud.
         estimators = {
-            "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, class_weight=None, max_iter=2000, random_state=42))]),
-            "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=3, weights="uniform", metric="manhattan", n_jobs=1))]),
-            "Árbol de Decisión": DecisionTreeClassifier(max_depth=10, min_samples_split=2, min_samples_leaf=5, class_weight=None, random_state=42),
-            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_split=2, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
+            "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, penalty="l2", max_iter=2000, random_state=42))]),
+            "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=3, metric="manhattan"))]),
+            "Árbol de Decisión": DecisionTreeClassifier(max_depth=10, min_samples_leaf=5, random_state=42),
+            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
         }
         for name, estimator in estimators.items():
             estimator.fit(X_train_data, y_train_data)
@@ -172,7 +198,7 @@ elif section == "Clasificación del abandono":
     c3.metric("Recall abandono", f"{best['Recall abandono']:.4f}")
     c4.metric("ROC-AUC", f"{best['ROC-AUC']:.4f}")
     st.success(f"**Modelo final del estudio: Random Forest.** En esta ejecución obtuvo F1 de {best['F1 abandono']:.4f} y Recall de {best['Recall abandono']:.4f} para la clase abandono.")
-    st.markdown("### Comparación de modelos — resultados reproducidos del notebook")
+    st.markdown("### Model comparison — notebook-aligned model configurations")
     st.dataframe(metrics.style.format({c:"{:.4f}" for c in metrics.columns if c!="Modelo"}), use_container_width=True, hide_index=True)
     metric_long = metrics.melt(id_vars="Modelo", value_vars=["Accuracy","Precision abandono","Recall abandono","F1 abandono","ROC-AUC","PR-AUC"], var_name="Métrica", value_name="Valor")
     st.plotly_chart(px.bar(metric_long, x="Modelo", y="Valor", color="Métrica", barmode="group", title="Comparación completa de métricas por modelo", text_auto=".3f").update_yaxes(range=[0,1]), use_container_width=True)
@@ -222,9 +248,9 @@ elif section == "Clasificación del abandono":
             st.info("KNN no cuenta con importancia de variables nativa. Para interpretarlo se requiere aplicar una técnica adicional, como permutation importance.")
     with tab4:
         pca=PCA(n_components=2, random_state=42)
-        # Use the preprocessed test matrix so PCA reflects the predictor space
-        zmat=pipe.named_steps["prep"].transform(Xte)
-        if hasattr(zmat,"toarray"): zmat=zmat.toarray()
+        # Apply the same preprocessing used by the selected classifier.
+        # Logistic Regression and KNN use StandardScaler; tree models use the encoded matrix directly.
+        zmat = pipe.named_steps["escalador"].transform(Xte_enc) if hasattr(pipe, "named_steps") else Xte_enc.to_numpy()
         coords=pca.fit_transform(zmat)
         pcadf=pd.DataFrame({"Componente 1":coords[:,0],"Componente 2":coords[:,1],"Clase real":np.where(yte.to_numpy()==1,"Abandonó","Permanece"),"Predicción":np.where(pred==1,"Abandonó","Permanece")})
         st.plotly_chart(px.scatter(pcadf,x="Componente 1",y="Componente 2",color="Clase real",symbol="Predicción",title="PCA de los registros de prueba: clase real y predicción",opacity=.7),use_container_width=True)
@@ -233,6 +259,7 @@ elif section == "Clasificación del abandono":
     st.markdown("#### Predicción exploratoria de un registro")
     with st.expander("Ingresar valores para estimar probabilidad"):
         vals = {}
+        cat = X.select_dtypes(include=["object", "category"]).columns.tolist()
         cols = st.columns(3)
         for i,col in enumerate(X.columns):
             if col in cat:

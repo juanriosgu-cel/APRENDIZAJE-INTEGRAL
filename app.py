@@ -41,9 +41,82 @@ h1,h2,h3 {letter-spacing: -0.02em;}
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data
+@st.cache_data(show_spinner=False, max_entries=1)
 def load_data():
-    return pd.read_csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
+    data = pd.read_csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
+    # Normaliza nombres traducidos a los nombres canónicos del dataset IBM.
+    # La aplicación trabaja internamente con Attrition; las etiquetas visibles
+    # se traducen únicamente en las tablas y visualizaciones.
+    reverse_labels = {
+        "Edad": "Age", "Abandono": "Attrition",
+        "Frecuencia de viajes laborales": "BusinessTravel",
+        "Tarifa diaria": "DailyRate", "Departamento": "Department",
+        "Distancia desde el hogar": "DistanceFromHome", "Nivel educativo": "Education",
+        "Campo de formación": "EducationField", "Conteo de empleados": "EmployeeCount",
+        "Número de empleado": "EmployeeNumber",
+        "Satisfacción con el entorno laboral": "EnvironmentSatisfaction",
+        "Género": "Gender", "Tarifa por hora": "HourlyRate",
+        "Involucramiento laboral": "JobInvolvement", "Nivel del cargo": "JobLevel",
+        "Cargo": "JobRole", "Satisfacción laboral": "JobSatisfaction",
+        "Estado civil": "MaritalStatus", "Ingreso mensual": "MonthlyIncome",
+        "Tarifa mensual": "MonthlyRate",
+        "Número de empresas en las que ha trabajado": "NumCompaniesWorked",
+        "Horas extra": "OverTime",
+        "Porcentaje de incremento salarial": "PercentSalaryHike",
+        "Calificación de desempeño": "PerformanceRating",
+        "Satisfacción con las relaciones laborales": "RelationshipSatisfaction",
+        "Horas estándar": "StandardHours",
+        "Nivel de opciones sobre acciones": "StockOptionLevel",
+        "Experiencia laboral total": "TotalWorkingYears",
+        "Capacitaciones realizadas el último año": "TrainingTimesLastYear",
+        "Equilibrio entre vida laboral y personal": "WorkLifeBalance",
+        "Antigüedad en la empresa": "YearsAtCompany",
+        "Antigüedad en el cargo actual": "YearsInCurrentRole",
+        "Años desde el último ascenso": "YearsSinceLastPromotion",
+        "Antigüedad con el jefe actual": "YearsWithCurrManager",
+    }
+    data = data.rename(columns={c: reverse_labels[c] for c in data.columns if c in reverse_labels})
+    if "Attrition" not in data.columns and "Abandono" in data.columns:
+        data = data.rename(columns={"Abandono": "Attrition"})
+    if "Attrition" not in data.columns:
+        raise ValueError("La base debe contener la variable objetivo 'Attrition' (o su alias 'Abandono').")
+    data["Attrition"] = data["Attrition"].replace({
+        "Abandonó": "Yes", "No abandonó": "No", "Permaneció": "No",
+        "Sí": "Yes"
+    })
+    return data
+
+@st.cache_resource(show_spinner=False)
+def entrenar_random_forest(X_train_data, y_train_data, model_version):
+    # Parámetros ganadores de GridSearchCV en el notebook ACA1.
+    # Se reutiliza el estimador cacheado para evitar entrenamientos duplicados.
+    modelo = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=5,
+        min_samples_split=2,
+        min_samples_leaf=2,
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=1
+    )
+    modelo.fit(X_train_data, y_train_data)
+    return modelo
+
+def preparar_datos_clasificacion(dataframe):
+    target = "Attrition"
+    X = dataframe.drop(
+        columns=[target, "EmployeeNumber", "Over18", "StandardHours", "EmployeeCount"],
+        errors="ignore"
+    )
+    y = (dataframe[target] == "Yes").astype(int)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.20, stratify=y, random_state=42
+    )
+    X_train_encoded = pd.get_dummies(X_train, drop_first=True, dtype=int)
+    X_test_encoded = pd.get_dummies(X_test, drop_first=True, dtype=int).reindex(
+        columns=X_train_encoded.columns, fill_value=0
+    )
+    return X, X_train_encoded, X_test_encoded, y_train, y_test
 
 df = load_data()
 
@@ -137,12 +210,7 @@ if section == "Resumen general":
 elif section == "Clasificación del abandono":
     st.subheader("Clasificación del abandono laboral")
     st.write("Se comparan los cuatro clasificadores con la misma partición estratificada 80/20 y los hiperparámetros seleccionados en el notebook mediante validación cruzada. El entrenamiento es secuencial para controlar el consumo de memoria.")
-    target = "Attrition"
-    X = df.drop(columns=[target, "EmployeeNumber", "Over18", "StandardHours", "EmployeeCount"], errors="ignore")
-    y = (df[target] == "Yes").astype(int)
-    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-    Xtr_enc = pd.get_dummies(Xtr, drop_first=True, dtype=np.uint8)
-    Xte_enc = pd.get_dummies(Xte, drop_first=True, dtype=np.uint8).reindex(columns=Xtr_enc.columns, fill_value=0)
+    X, Xtr_enc, Xte_enc, ytr, yte = preparar_datos_clasificacion(df)
 
     @st.cache_resource(show_spinner="Entrenando clasificadores (modo de bajo consumo)…")
     def entrenar_clasificadores(X_train_data, X_test_data, y_train_data, y_test_data, model_version):
@@ -169,22 +237,11 @@ elif section == "Clasificación del abandono":
                 "ROC-AUC": roc_auc_score(y_test_data, prob),
                 "PR-AUC": average_precision_score(y_test_data, prob)
             })
-        # Random Forest: usar la búsqueda de hiperparámetros definida en ACA1,
-        # no una configuración manual distinta. Se ejecuta secuencialmente para
-        # controlar memoria y se cachea el resultado.
-        # Hiperparámetros óptimos registrados en el notebook ACA1.
-        # Se usa el estimador final directamente para evitar una GridSearch
-        # repetida en Streamlit Cloud y reproducir la matriz del notebook.
-        rf_model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=5,
-            min_samples_split=2,
-            min_samples_leaf=2,
-            class_weight="balanced",
-            random_state=42,
-            n_jobs=1
+        # Random Forest optimizado del notebook, reutilizado desde caché.
+        rf_model = entrenar_random_forest(
+            X_train_data, y_train_data,
+            model_version="ACA1_RF_gridsearch_best_20261031_v4"
         )
-        rf_model.fit(X_train_data, y_train_data)
         rf_pred = rf_model.predict(X_test_data)
         rf_prob = rf_model.predict_proba(X_test_data)[:, 1]
         fitted_models["Random Forest"] = (rf_model, rf_pred, rf_prob)
@@ -199,7 +256,7 @@ elif section == "Clasificación del abandono":
         })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_best_params_notebook_20261101_v3")
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_gridsearch_best_20261031_v4")
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -219,8 +276,17 @@ elif section == "Clasificación del abandono":
     pipe,pred,prob = fitted[chosen]
     tab1,tab2,tab3,tab4 = st.tabs(["Matriz de confusión", "Curvas ROC y Precision-Recall", "Variables", "PCA"])
     with tab1:
-        cm = confusion_matrix(yte,pred)
+        cm = confusion_matrix(yte, pred, labels=[0, 1])
         st.plotly_chart(px.imshow(cm, text_auto=True, x=["Predijo no abandono","Predijo abandono"], y=["Real no abandono","Real abandono"], color_continuous_scale="Blues", title=f"Matriz de confusión: {chosen}"), use_container_width=True)
+        if chosen == "Random Forest":
+            matriz_referencia = np.array([[221, 26], [26, 21]])
+            if np.array_equal(cm, matriz_referencia):
+                st.success("La matriz de Random Forest coincide con la referencia del notebook y se obtuvo de las predicciones del modelo.")
+            else:
+                st.warning(
+                    "La matriz se calculó desde las predicciones reales, pero no coincide con la referencia del notebook. "
+                    f"Resultado calculado: {cm.tolist()}. Revise la versión de la base y la configuración del entorno."
+                )
         tn,fp,fn,tp = cm.ravel()
         a,b,c,d = st.columns(4)
         a.metric("Verdaderos positivos", int(tp)); b.metric("Falsos negativos", int(fn)); c.metric("Falsos positivos", int(fp)); d.metric("Verdaderos negativos", int(tn))
@@ -260,10 +326,10 @@ elif section == "Clasificación del abandono":
             st.info("KNN no cuenta con importancia de variables nativa. Para interpretarlo se requiere aplicar una técnica adicional, como permutation importance.")
     with tab4:
         pca=PCA(n_components=2, random_state=42)
-        # Apply the same preprocessing used by the selected classifier.
-        # Logistic Regression and KNN use StandardScaler; tree models use the encoded matrix directly.
-        if isinstance(pipe, Pipeline) and "escalador" in pipe.named_steps:
-            zmat = pipe.named_steps["escalador"].transform(Xte_enc)
+        # Aplicar todos los pasos de preprocesamiento del pipeline, sin asumir
+        # nombres concretos como "prep" o "escalador".
+        if isinstance(pipe, Pipeline) and len(pipe.steps) > 1:
+            zmat = pipe[:-1].transform(Xte_enc)
         else:
             zmat = Xte_enc.to_numpy(dtype=float)
         coords=pca.fit_transform(zmat)
@@ -544,7 +610,17 @@ elif section == "Análisis exploratorio (EDA)":
         st.dataframe(eda_translate_frame(desc), use_container_width=True)
         st.markdown("### Distribuciones numéricas")
         selected_num = st.selectbox("Seleccione una variable numérica", num_cols, format_func=lambda v: EDA_LABELS.get(v, v), key="eda_num_dist")
-        st.plotly_chart(px.histogram(df, x=selected_num, color="Attrition", marginal="box", barmode="overlay", opacity=.65, title=f"Distribución de {EDA_LABELS.get(selected_num, selected_num)} según abandono", labels=EDA_LABELS), use_container_width=True)
+        eda_hist = df[[selected_num, "Attrition"]].copy()
+        eda_hist["Estado de abandono"] = eda_hist["Attrition"].replace({"Yes": "Abandonó", "No": "Permaneció"})
+        st.plotly_chart(
+            px.histogram(
+                eda_hist, x=selected_num, color="Estado de abandono",
+                marginal="box", barmode="overlay", opacity=.65,
+                title=f"Distribución de {EDA_LABELS.get(selected_num, selected_num)} según abandono",
+                labels={**EDA_LABELS, "Estado de abandono": "Estado de abandono"}
+            ),
+            use_container_width=True
+        )
 
     with tab3:
         st.markdown("### Variables numéricas según condición de abandono")
@@ -627,7 +703,7 @@ elif section == "Análisis exploratorio (EDA)":
         plot_specs=[spec for spec in plot_specs if spec[0] in df.columns and spec[1] in df.columns]
         cols=st.columns(len(plot_specs))
         for colbox,(xvar,yvar,title) in zip(cols,plot_specs):
-            fig=px.scatter(plot_df,x=xvar,y=yvar,color="Clasificación IQR",color_discrete_map={"Dentro del rango IQR":"#2583C5","Posible valor atípico":"#E76F51"},opacity=.72,title=title,hover_data=["Abandono"])
+            fig=px.scatter(plot_df,x=xvar,y=yvar,color="Clasificación IQR",color_discrete_map={"Dentro del rango IQR":"#2583C5","Posible valor atípico":"#E76F51"},opacity=.72,title=title,hover_data=["Attrition"])
             fig.update_layout(template="plotly_white",title_x=.03,legend_title_text="Tipo de registro",font=dict(size=12),margin=dict(l=12,r=12,t=55,b=12),height=390)
             colbox.plotly_chart(fig,use_container_width=True)
         out_var=st.selectbox("Explorar una variable en detalle", out_vars, format_func=lambda v: EDA_LABELS.get(v, v), key="eda_outlier_var")
@@ -644,11 +720,7 @@ elif section == "Análisis exploratorio (EDA)":
         # Clasificación: usar exactamente la misma partición, codificación y
         # configuraciones que el módulo Clasificación del abandono.
         st.markdown("#### 1. Clasificación del abandono")
-        Xc = df.drop(columns=["Attrition", "EmployeeNumber", "Over18", "StandardHours", "EmployeeCount"], errors="ignore")
-        yc = (df["Attrition"] == "Yes").astype(int)
-        Xtrc, Xtec, ytrc, ytec = train_test_split(Xc, yc, test_size=0.2, random_state=42, stratify=yc)
-        Xtrc_enc = pd.get_dummies(Xtrc, drop_first=True, dtype=np.uint8)
-        Xtec_enc = pd.get_dummies(Xtec, drop_first=True, dtype=np.uint8).reindex(columns=Xtrc_enc.columns, fill_value=0)
+        Xc, Xtrc_enc, Xtec_enc, ytrc, ytec = preparar_datos_clasificacion(df)
         cls_models = {
             "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, penalty="l2", max_iter=2000, random_state=42))]),
             "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=3, metric="manhattan"))]),
@@ -661,17 +733,11 @@ elif section == "Análisis exploratorio (EDA)":
             prob_cls=estimator.predict_proba(Xtec_enc)[:,1]
             cls_fitted[nm]=(pred_cls,prob_cls)
             cls_rows.append({"Modelo":nm,"Precision abandono":precision_score(ytec,pred_cls,zero_division=0),"Recall abandono":recall_score(ytec,pred_cls,zero_division=0),"F1 abandono":f1_score(ytec,pred_cls,zero_division=0),"ROC-AUC":roc_auc_score(ytec,prob_cls)})
-        # Mismos hiperparámetros optimizados del notebook ACA1.
-        rf_eda = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=5,
-            min_samples_split=2,
-            min_samples_leaf=2,
-            class_weight="balanced",
-            random_state=42,
-            n_jobs=1
+        # Reutiliza el mismo Random Forest optimizado y cacheado del módulo principal.
+        rf_eda = entrenar_random_forest(
+            Xtrc_enc, ytrc,
+            model_version="ACA1_RF_gridsearch_best_20261031_v4"
         )
-        rf_eda.fit(Xtrc_enc, ytrc)
         pred_rf_eda = rf_eda.predict(Xtec_enc)
         prob_rf_eda = rf_eda.predict_proba(Xtec_enc)[:, 1]
         cls_fitted["Random Forest"] = (pred_rf_eda, prob_rf_eda)
@@ -690,10 +756,16 @@ elif section == "Análisis exploratorio (EDA)":
         fig_cls.update_layout(template="plotly_white",title_x=.02,yaxis=dict(range=[0,1]),legend_title_text="Métrica",margin=dict(l=10,r=10,t=65,b=10),height=440)
         st.plotly_chart(fig_cls,use_container_width=True)
         cls_choice=st.selectbox("Modelo para ver matriz de confusión",list(cls_fitted.keys()),index=list(cls_fitted.keys()).index("Random Forest"),key="eda_cls_matrix_choice")
-        cm=confusion_matrix(ytec,cls_fitted[cls_choice][0])
+        cm=confusion_matrix(ytec,cls_fitted[cls_choice][0],labels=[0,1])
         fig_cm=px.imshow(cm,text_auto=True,x=["Predice permanece","Predice abandono"],y=["Real permanece","Real abandono"],color_continuous_scale="Blues",title=f"Matriz de confusión — {cls_choice}")
         fig_cm.update_layout(template="plotly_white",title_x=.02,height=390)
         st.plotly_chart(fig_cm,use_container_width=True)
+        if cls_choice == "Random Forest":
+            matriz_referencia = np.array([[221, 26], [26, 21]])
+            if np.array_equal(cm, matriz_referencia):
+                st.success("La matriz de Random Forest coincide con la referencia del notebook y se obtuvo de predicciones reales.")
+            else:
+                st.warning(f"La matriz calculada no coincide con la referencia del notebook: {cm.tolist()}.")
         st.caption("La matriz utiliza la misma partición estratificada, codificación y configuración de modelos que el módulo de clasificación.")
 
         # Regresión: predicciones reales de tres modelos en la misma partición.
@@ -735,7 +807,7 @@ elif section == "Análisis exploratorio (EDA)":
         seg_pca=PCA(n_components=2,random_state=42)
         seg_coords=seg_pca.fit_transform(seg_z)
         seg_df=pd.DataFrame({"Componente 1":seg_coords[:,0],"Componente 2":seg_coords[:,1],"Grupo":seg_lab.astype(str),"Abandono":df["Attrition"].values})
-        fig_seg=px.scatter(seg_df,x="Componente 1",y="Componente 2",color="Grupo",symbol="Abandono",opacity=.72,title="Cinco grupos K-means proyectados mediante PCA",hover_data=["Abandono"],color_discrete_sequence=["#176B87","#64CCC5","#E76F51","#6C63A8","#E9C46A"])
+        fig_seg=px.scatter(seg_df,x="Componente 1",y="Componente 2",color="Grupo",symbol="Abandono",opacity=.72,title="Cinco grupos K-means proyectados mediante PCA",hover_data=["Attrition"],color_discrete_sequence=["#176B87","#64CCC5","#E76F51","#6C63A8","#E9C46A"])
         fig_seg.update_layout(template="plotly_white",title_x=.02,height=480,legend_title_text="Grupo")
         st.plotly_chart(fig_seg,use_container_width=True)
         seg_with_labels=df[seg_vars].copy()
@@ -767,7 +839,7 @@ else:
     st.subheader("Metodología y limitaciones")
     etapas = [
         ("1. Datos", "Se utiliza la base IBM HR Analytics, con 1.470 registros y variables demográficas, laborales y salariales."),
-        ("2. Preprocesamiento", "Se revisan tipos de variables y se transforman las variables categóricas mediante codificación. En clasificación se aplica preprocesamiento dentro del pipeline; en regresión se emplea la codificación dummy definida en el notebook; en segmentación se estandarizan las cuatro variables numéricas seleccionadas."),
+        ("2. Preprocesamiento", "Se revisan tipos de variables y se transforman las variables categóricas mediante codificación. En clasificación se aplica codificación dummy alineada entre entrenamiento y prueba; en regresión se emplea la codificación dummy definida en el notebook; en segmentación se estandarizan las cuatro variables numéricas seleccionadas."),
         ("3. Modelamiento", "Clasificación: Regresión Logística, KNN, Árbol de Decisión y Random Forest. Regresión: Lineal, Ridge y Lasso. Segmentación: K-means, jerárquico y DBSCAN."),
         ("4. Optimización y selección", "Los modelos se comparan con métricas apropiadas a cada tarea. Para regresión se consideran R², MAE y RMSE; para segmentación se compara Silhouette; para clasificación se revisan Recall, F1, ROC-AUC y PR-AUC, además de la matriz de confusión."),
         ("5. Evaluación e interpretación", "Cada módulo presenta tablas, visualizaciones y una interpretación automática que identifica el mejor resultado según el criterio definido. La selección se refiere a los modelos y parámetros ejecutados en la aplicación."),

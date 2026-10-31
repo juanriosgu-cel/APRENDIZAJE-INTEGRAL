@@ -626,29 +626,25 @@ elif section == "Análisis exploratorio (EDA)":
         st.markdown("### Resultados visuales de los modelos")
         st.caption("Estas vistas complementan los módulos de modelamiento. Las métricas se calculan en una partición reproducible; la segmentación es exploratoria y no implica perfiles de desempeño laboral.")
 
-        # Clasificación: ajustar modelos sobre la misma partición usada en el módulo individual.
+        # Clasificación: usar exactamente la misma partición, codificación y
+        # configuraciones que el módulo Clasificación del abandono.
         st.markdown("#### 1. Clasificación del abandono")
         Xc = df.drop(columns=["Attrition", "EmployeeNumber", "Over18", "StandardHours", "EmployeeCount"], errors="ignore")
         yc = (df["Attrition"] == "Yes").astype(int)
         Xtrc, Xtec, ytrc, ytec = train_test_split(Xc, yc, test_size=0.2, random_state=42, stratify=yc)
-        catc = Xc.select_dtypes(include=["object"]).columns.tolist()
-        numc = Xc.select_dtypes(exclude=["object"]).columns.tolist()
-        prec = ColumnTransformer([
-            ("num", Pipeline([("imputer", SimpleImputer(strategy="median")), ("scale", StandardScaler())]), numc),
-            ("cat", Pipeline([("imputer", SimpleImputer(strategy="most_frequent")), ("onehot", OneHotEncoder(handle_unknown="ignore"))]), catc)
-        ])
+        Xtrc_enc = pd.get_dummies(Xtrc, drop_first=True, dtype=np.uint8)
+        Xtec_enc = pd.get_dummies(Xtec, drop_first=True, dtype=np.uint8).reindex(columns=Xtrc_enc.columns, fill_value=0)
         cls_models = {
-            "Regresión Logística": LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42),
-            "KNN": KNeighborsClassifier(n_neighbors=7),
-            "Árbol de decisión": DecisionTreeClassifier(max_depth=5, class_weight="balanced", random_state=42),
-            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, class_weight="balanced", random_state=42, min_samples_leaf=2, n_jobs=1)
+            "Regresión Logística": Pipeline([("escalador", StandardScaler()), ("modelo", LogisticRegression(C=1, penalty="l2", max_iter=2000, random_state=42))]),
+            "KNN": Pipeline([("escalador", StandardScaler()), ("modelo", KNeighborsClassifier(n_neighbors=3, metric="manhattan"))]),
+            "Árbol de Decisión": DecisionTreeClassifier(max_depth=10, min_samples_leaf=5, random_state=42),
+            "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_leaf=2, class_weight="balanced", random_state=42, n_jobs=1)
         }
         cls_rows=[]; cls_fitted={}
         for nm, estimator in cls_models.items():
-            pipe_cls=Pipeline([("prep", prec), ("model", estimator)])
-            pipe_cls.fit(Xtrc, ytrc)
-            pred_cls=pipe_cls.predict(Xtec)
-            prob_cls=pipe_cls.predict_proba(Xtec)[:,1]
+            estimator.fit(Xtrc_enc, ytrc)
+            pred_cls=estimator.predict(Xtec_enc)
+            prob_cls=estimator.predict_proba(Xtec_enc)[:,1]
             cls_fitted[nm]=(pred_cls,prob_cls)
             cls_rows.append({"Modelo":nm,"Precision abandono":precision_score(ytec,pred_cls,zero_division=0),"Recall abandono":recall_score(ytec,pred_cls,zero_division=0),"F1 abandono":f1_score(ytec,pred_cls,zero_division=0),"ROC-AUC":roc_auc_score(ytec,prob_cls)})
         cls_metrics=pd.DataFrame(cls_rows).sort_values("F1 abandono",ascending=False)
@@ -660,12 +656,12 @@ elif section == "Análisis exploratorio (EDA)":
         fig_cls=px.bar(cls_long,x="Modelo",y="Valor",color="Métrica",barmode="group",text_auto=".2f",title="Comparación de clasificadores en datos de prueba",color_discrete_sequence=["#176B87","#64CCC5","#E76F51","#6C63A8"])
         fig_cls.update_layout(template="plotly_white",title_x=.02,yaxis=dict(range=[0,1]),legend_title_text="Métrica",margin=dict(l=10,r=10,t=65,b=10),height=440)
         st.plotly_chart(fig_cls,use_container_width=True)
-        cls_choice=st.selectbox("Modelo para ver matriz de confusión",list(cls_fitted.keys()),index=list(cls_metrics["Modelo"]).index(cls_metrics.iloc[0]["Modelo"]),key="eda_cls_matrix_choice")
+        cls_choice=st.selectbox("Modelo para ver matriz de confusión",list(cls_fitted.keys()),index=list(cls_fitted.keys()).index("Random Forest"),key="eda_cls_matrix_choice")
         cm=confusion_matrix(ytec,cls_fitted[cls_choice][0])
         fig_cm=px.imshow(cm,text_auto=True,x=["Predice permanece","Predice abandono"],y=["Real permanece","Real abandono"],color_continuous_scale="Blues",title=f"Matriz de confusión — {cls_choice}")
         fig_cm.update_layout(template="plotly_white",title_x=.02,height=390)
         st.plotly_chart(fig_cm,use_container_width=True)
-        st.caption("La partición de prueba se usa para comparar los modelos. Los resultados pueden variar si cambian los datos, el preprocesamiento o los parámetros.")
+        st.caption("La matriz utiliza la misma partición estratificada, codificación y configuración de modelos que el módulo de clasificación.")
 
         # Regresión: predicciones reales de tres modelos en la misma partición.
         st.markdown("#### 2. Regresión del ingreso mensual")

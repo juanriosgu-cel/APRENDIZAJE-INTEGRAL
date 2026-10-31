@@ -42,50 +42,9 @@ h1,h2,h3 {letter-spacing: -0.02em;}
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data(show_spinner=False, max_entries=1)
+@st.cache_data
 def load_data():
-    data = pd.read_csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
-    # Normaliza nombres traducidos a los nombres canónicos del dataset IBM.
-    # La aplicación trabaja internamente con Attrition; las etiquetas visibles
-    # se traducen únicamente en las tablas y visualizaciones.
-    reverse_labels = {
-        "Edad": "Age", "Abandono": "Attrition",
-        "Frecuencia de viajes laborales": "BusinessTravel",
-        "Tarifa diaria": "DailyRate", "Departamento": "Department",
-        "Distancia desde el hogar": "DistanceFromHome", "Nivel educativo": "Education",
-        "Campo de formación": "EducationField", "Conteo de empleados": "EmployeeCount",
-        "Número de empleado": "EmployeeNumber",
-        "Satisfacción con el entorno laboral": "EnvironmentSatisfaction",
-        "Género": "Gender", "Tarifa por hora": "HourlyRate",
-        "Involucramiento laboral": "JobInvolvement", "Nivel del cargo": "JobLevel",
-        "Cargo": "JobRole", "Satisfacción laboral": "JobSatisfaction",
-        "Estado civil": "MaritalStatus", "Ingreso mensual": "MonthlyIncome",
-        "Tarifa mensual": "MonthlyRate",
-        "Número de empresas en las que ha trabajado": "NumCompaniesWorked",
-        "Horas extra": "OverTime",
-        "Porcentaje de incremento salarial": "PercentSalaryHike",
-        "Calificación de desempeño": "PerformanceRating",
-        "Satisfacción con las relaciones laborales": "RelationshipSatisfaction",
-        "Horas estándar": "StandardHours",
-        "Nivel de opciones sobre acciones": "StockOptionLevel",
-        "Experiencia laboral total": "TotalWorkingYears",
-        "Capacitaciones realizadas el último año": "TrainingTimesLastYear",
-        "Equilibrio entre vida laboral y personal": "WorkLifeBalance",
-        "Antigüedad en la empresa": "YearsAtCompany",
-        "Antigüedad en el cargo actual": "YearsInCurrentRole",
-        "Años desde el último ascenso": "YearsSinceLastPromotion",
-        "Antigüedad con el jefe actual": "YearsWithCurrManager",
-    }
-    data = data.rename(columns={c: reverse_labels[c] for c in data.columns if c in reverse_labels})
-    if "Attrition" not in data.columns and "Abandono" in data.columns:
-        data = data.rename(columns={"Abandono": "Attrition"})
-    if "Attrition" not in data.columns:
-        raise ValueError("La base debe contener la variable objetivo 'Attrition' (o su alias 'Abandono').")
-    data["Attrition"] = data["Attrition"].replace({
-        "Abandonó": "Yes", "No abandonó": "No", "Permaneció": "No",
-        "Sí": "Yes"
-    })
-    return data
+    return pd.read_csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
 
 def entrenar_random_forest(X_train_data, y_train_data):
     # Parámetros ganadores de GridSearchCV en el notebook ACA1.
@@ -120,16 +79,6 @@ def preparar_datos_clasificacion(dataframe):
 
 df = load_data()
 
-# Huella de integridad de la base IBM HR Analytics utilizada en el notebook ACA1.
-# Permite detectar si el archivo del despliegue no corresponde al CSV validado.
-def huella_base(dataframe):
-    payload = pd.util.hash_pandas_object(dataframe, index=True).values.tobytes()
-    payload += "|".join(map(str, dataframe.columns)).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-HUELLA_BASE_REFERENCIA = "a8b0cee486083ec78743655944f83bde12b0657e61c65c79dc9ded40a654397f"
-HUELLA_BASE_ACTUAL = huella_base(df)
-BASE_COINCIDE_REFERENCIA = HUELLA_BASE_ACTUAL == HUELLA_BASE_REFERENCIA
 
 # Etiquetas de presentación en español; los nombres internos del dataset permanecen intactos.
 EDA_LABELS = {
@@ -192,7 +141,6 @@ with st.sidebar:
     st.caption("Base de datos IBM HR Analytics")
     st.write(f"Registros: **{len(df):,}**")
     st.write(f"Variables: **{df.shape[1]}**")
-    st.caption(f"Abandono: {(df['Attrition'] == 'Yes').sum():,} | Permanencia: {(df['Attrition'] == 'No').sum():,}")
 
 if section == "Resumen general":
     st.subheader("Resumen de la base de datos")
@@ -467,6 +415,7 @@ elif section == "Segmentación de empleados":
         Xseg.columns = variables_elegidas
         Z = StandardScaler().fit_transform(Xseg)
 
+        # Se conservan los algoritmos, parámetros y etiquetas originales de cada método.
         labels_all = {
             "K-means": KMeans(n_clusters=k_grupos, random_state=42, n_init=10).fit_predict(Z),
             "Jerárquico (Ward)": AgglomerativeClustering(n_clusters=k_grupos).fit_predict(Z),
@@ -475,7 +424,6 @@ elif section == "Segmentación de empleados":
         }
         scores = {}
         for name, lab in labels_all.items():
-            # En DBSCAN, Silhouette se calcula sobre los grupos válidos, excluyendo ruido.
             valid = lab != -1 if name == "DBSCAN" else np.ones(len(lab), dtype=bool)
             etiquetas_validas = lab[valid]
             grupos_validos = np.unique(etiquetas_validas)
@@ -520,27 +468,100 @@ elif section == "Segmentación de empleados":
             px.bar(score_df, x="Método", y="Silhouette", text_auto=".4f", title="Comparación de Silhouette: mayor es mejor"),
             use_container_width=True,
         )
+
         st.markdown("### Explorar cada método")
         algo = metodo_explorar
-        labels = labels_all[algo]
-        n_clusters = len(set(labels) - ({-1} if algo == "DBSCAN" else set()))
-        noise = int((labels == -1).sum()) if algo == "DBSCAN" else 0
-        out = Xseg.copy()
-        out["Grupo"] = labels.astype(str)
-        profile = out[out["Grupo"] != "-1"].groupby("Grupo")[Xseg.columns].agg(["count", "mean"]).round(2)
+        labels = np.asarray(labels_all[algo])  # etiquetas originales del algoritmo, sin reasignación
+        n_clusters = len(set(labels.tolist()) - ({-1} if algo == "DBSCAN" else set()))
+        noise_mask = labels == -1 if algo == "DBSCAN" else np.zeros(len(labels), dtype=bool)
+        noise = int(noise_mask.sum())
+
+        # Distribución: incluye todas las observaciones y, para DBSCAN, el ruido como categoría separada.
+        distribution = pd.DataFrame({"Grupo": labels})
+        distribution["Grupo"] = distribution["Grupo"].map(
+            lambda value: "Ruido (-1)" if algo == "DBSCAN" and value == -1 else f"Grupo {value}"
+        )
+        distribution = (
+            distribution.groupby("Grupo", sort=False)
+            .size()
+            .rename("Empleados")
+            .reset_index()
+        )
+        distribution["Porcentaje"] = distribution["Empleados"] / len(labels) * 100
+        distribution["Orden"] = distribution["Grupo"].map(
+            lambda value: -1 if value == "Ruido (-1)" else int(value.replace("Grupo ", ""))
+        )
+        distribution = distribution.sort_values("Orden").drop(columns="Orden")
+        distribution["Porcentaje"] = distribution["Porcentaje"].round(2)
+
+        # Perfil descriptivo: se calcula con las etiquetas reales. DBSCAN excluye ruido del perfil
+        # porque -1 no representa un grupo homogéneo.
+        profile_data = Xseg.copy()
+        profile_data["Grupo"] = labels
+        if algo == "DBSCAN":
+            profile_data = profile_data.loc[~noise_mask]
+        profile = (
+            profile_data.groupby("Grupo", sort=True)[Xseg.columns]
+            .mean()
+            .round(2)
+            .reset_index()
+        )
+        profile = profile.rename(columns={"Grupo": "Identificador del grupo"})
+
+        st.markdown(f"#### Distribución de empleados: {algo}")
+        st.dataframe(distribution[["Grupo", "Empleados", "Porcentaje"]], use_container_width=True, hide_index=True)
+        fig_distribution = px.bar(
+            distribution,
+            x="Grupo",
+            y="Empleados",
+            text="Empleados",
+            hover_data={"Porcentaje": ":.2f", "Empleados": True, "Grupo": True},
+            title=f"Cantidad de empleados por grupo: {algo}",
+        )
+        fig_distribution.update_traces(textposition="outside")
+        fig_distribution.update_layout(yaxis_title="Número de empleados", xaxis_title="Grupo")
+        st.plotly_chart(fig_distribution, use_container_width=True)
+
         st.markdown(f"#### Perfil de grupos: {algo}")
-        st.dataframe(profile, use_container_width=True)
+        if profile.empty:
+            st.info("No se identificaron grupos válidos para construir perfiles; todas las observaciones fueron clasificadas como ruido.")
+        else:
+            st.dataframe(profile, use_container_width=True, hide_index=True)
+
         a, b, c = st.columns(3)
         a.metric("Grupos identificados", n_clusters)
         a_score = scores[algo]
         b.metric("Silhouette", f"{a_score:.4f}" if np.isfinite(a_score) else "No calculable")
         c.metric("Observaciones de ruido", f"{noise:,}" if algo == "DBSCAN" else "No aplica")
+
         if np.isfinite(a_score):
             st.write("**Interpretación:** " + ("la separación de los grupos es relativamente débil/moderada y existe solapamiento entre algunos perfiles." if a_score < .5 else "los grupos presentan una separación relativamente marcada según Silhouette."))
         if algo == "DBSCAN":
-            st.write(f"DBSCAN identificó {n_clusters} grupos y {noise} observaciones como ruido ({noise/len(df):.2%}). El ruido corresponde a registros que no cumplen el criterio de densidad configurado; no significa que sean errores.")
+            st.write(f"DBSCAN identificó {n_clusters} grupos válidos y {noise} observaciones como ruido ({noise/len(df):.2%}). El ruido se presenta por separado en la distribución y no se incluye en los promedios de perfil.")
         else:
-            st.write("Las etiquetas numéricas de los grupos son arbitrarias. Compare los promedios de las variables seleccionadas para describir los perfiles; no debe inferirse desempeño ni riesgo sin evidencia adicional.")
+            st.write("Las etiquetas numéricas corresponden directamente a las asignadas por el algoritmo. Compare los promedios calculados para describir cada perfil; no debe inferirse desempeño ni riesgo sin evidencia adicional.")
+
+        # Interpretación basada en los promedios efectivamente calculados, no en etiquetas inventadas.
+        if len(profile) >= 2:
+            st.markdown("**Diferencias observadas entre perfiles:**")
+            for variable in Xseg.columns:
+                means = profile.set_index("Identificador del grupo")[variable]
+                low_group, high_group = means.idxmin(), means.idxmax()
+                low_value, high_value = float(means.min()), float(means.max())
+                if low_group != high_group:
+                    st.write(
+                        f"- **{variable}:** el grupo {low_group} presenta el promedio más bajo "
+                        f"({low_value:,.2f}) y el grupo {high_group} el más alto ({high_value:,.2f})."
+                    )
+
+        # Comprobación de consistencia interna de etiquetas, distribución y porcentajes.
+        total_distribution = int(distribution["Empleados"].sum())
+        total_percentage = float(distribution["Porcentaje"].sum())
+        if total_distribution != len(labels):
+            st.error("La distribución presentada no coincide con el número de etiquetas asignadas por el modelo.")
+        elif not np.isclose(total_percentage, 100.0, atol=0.02):
+            st.warning(f"Los porcentajes se muestran redondeados y suman {total_percentage:.2f}%; el cálculo sin redondear corresponde al 100%.")
+
         pca = PCA(n_components=2, random_state=42)
         coords = pca.fit_transform(Z)
         plot = pd.DataFrame({"Componente 1": coords[:, 0], "Componente 2": coords[:, 1], "Grupo": labels.astype(str)})
@@ -552,6 +573,8 @@ elif section == "Segmentación de empleados":
             fig.add_trace(go.Scatter(x=coords[:, 0], y=coords[:, 1], mode="markers", name=method, visible=(method == algo), marker=dict(size=6), text=lab.astype(str), hovertemplate="PC1=%{x:.2f}<br>PC2=%{y:.2f}<br>Grupo=%{text}<extra></extra>"))
         fig.update_layout(title="PCA: seleccione la leyenda para mostrar/ocultar métodos", xaxis_title="Componente 1", yaxis_title="Componente 2")
         st.plotly_chart(fig, use_container_width=True)
+        out = Xseg.copy()
+        out["Grupo"] = labels  # conserva la etiqueta numérica original, incluido -1 en DBSCAN
         st.download_button("Descargar empleados con grupo asignado", out.to_csv(index=False).encode("utf-8-sig"), f"empleados_segmentados_{algo.replace(' ', '_')}.csv", "text/csv")
 
 elif section == "Análisis exploratorio (EDA)":
@@ -829,7 +852,7 @@ else:
     st.subheader("Metodología y limitaciones")
     etapas = [
         ("1. Datos", "Se utiliza la base IBM HR Analytics, con 1.470 registros y variables demográficas, laborales y salariales."),
-        ("2. Preprocesamiento", "Se revisan tipos de variables y se transforman las variables categóricas mediante codificación. En clasificación se aplica codificación dummy alineada entre entrenamiento y prueba; en regresión se emplea la codificación dummy definida en el notebook; en segmentación se estandarizan las cuatro variables numéricas seleccionadas."),
+        ("2. Preprocesamiento", "Se revisan tipos de variables y se transforman las variables categóricas mediante codificación. En clasificación se aplica preprocesamiento dentro del pipeline; en regresión se emplea la codificación dummy definida en el notebook; en segmentación se estandarizan las cuatro variables numéricas seleccionadas."),
         ("3. Modelamiento", "Clasificación: Regresión Logística, KNN, Árbol de Decisión y Random Forest. Regresión: Lineal, Ridge y Lasso. Segmentación: K-means, jerárquico y DBSCAN."),
         ("4. Optimización y selección", "Los modelos se comparan con métricas apropiadas a cada tarea. Para regresión se consideran R², MAE y RMSE; para segmentación se compara Silhouette; para clasificación se revisan Recall, F1, ROC-AUC y PR-AUC, además de la matriz de confusión."),
         ("5. Evaluación e interpretación", "Cada módulo presenta tablas, visualizaciones y una interpretación automática que identifica el mejor resultado según el criterio definido. La selección se refiere a los modelos y parámetros ejecutados en la aplicación."),

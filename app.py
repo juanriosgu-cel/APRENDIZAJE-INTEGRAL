@@ -20,6 +20,7 @@ from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 import warnings
+import hashlib
 warnings.filterwarnings("ignore")
 
 st.set_page_config(page_title="Analítica de talento humano", page_icon="📊", layout="wide")
@@ -120,6 +121,17 @@ def preparar_datos_clasificacion(dataframe):
 
 df = load_data()
 
+# Huella de integridad de la base IBM HR Analytics utilizada en el notebook ACA1.
+# Permite detectar si el archivo del despliegue no corresponde al CSV validado.
+def huella_base(dataframe):
+    payload = pd.util.hash_pandas_object(dataframe, index=True).values.tobytes()
+    payload += "|".join(map(str, dataframe.columns)).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+HUELLA_BASE_REFERENCIA = "a8b0cee486083ec78743655944f83bde12b0657e61c65c79dc9ded40a654397f"
+HUELLA_BASE_ACTUAL = huella_base(df)
+BASE_COINCIDE_REFERENCIA = HUELLA_BASE_ACTUAL == HUELLA_BASE_REFERENCIA
+
 # Etiquetas de presentación en español; los nombres internos del dataset permanecen intactos.
 EDA_LABELS = {
     "Age":"Edad", "Attrition":"Abandono", "BusinessTravel":"Frecuencia de viajes laborales",
@@ -181,6 +193,12 @@ with st.sidebar:
     st.caption("Base de datos IBM HR Analytics")
     st.write(f"Registros: **{len(df):,}**")
     st.write(f"Variables: **{df.shape[1]}**")
+    st.caption(f"Abandono: {(df['Attrition'] == 'Yes').sum():,} | Permanencia: {(df['Attrition'] == 'No').sum():,}")
+    if BASE_COINCIDE_REFERENCIA:
+        st.success("Base validada: coincide con el CSV del notebook ACA1.")
+    else:
+        st.warning("La base del despliegue no coincide con el CSV validado. La matriz puede diferir.")
+        st.caption(f"Huella de la base: {HUELLA_BASE_ACTUAL[:16]}…")
 
 if section == "Resumen general":
     st.subheader("Resumen de la base de datos")
@@ -240,7 +258,7 @@ elif section == "Clasificación del abandono":
         # Random Forest optimizado del notebook, reutilizado desde caché.
         rf_model = entrenar_random_forest(
             X_train_data, y_train_data,
-            model_version="ACA1_RF_gridsearch_best_20261031_v5"
+            model_version="ACA1_RF_gridsearch_best_20261031_v6"
         )
         rf_pred = rf_model.predict(X_test_data)
         rf_prob = rf_model.predict_proba(X_test_data)[:, 1]
@@ -256,7 +274,7 @@ elif section == "Clasificación del abandono":
         })
         return fitted_models, pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
 
-    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_gridsearch_best_20261031_v5")
+    fitted, execution_metrics = entrenar_clasificadores(Xtr_enc, Xte_enc, ytr, yte, model_version="ACA1_RF_gridsearch_best_20261031_v6")
     # Métricas y matrices se calculan sobre las predicciones de los modelos
     # configurados con los hiperparámetros del notebook.
     metrics = execution_metrics.copy()
@@ -736,7 +754,7 @@ elif section == "Análisis exploratorio (EDA)":
         # Reutiliza el mismo Random Forest optimizado y cacheado del módulo principal.
         rf_eda = entrenar_random_forest(
             Xtrc_enc, ytrc,
-            model_version="ACA1_RF_gridsearch_best_20261031_v5"
+            model_version="ACA1_RF_gridsearch_best_20261031_v6"
         )
         pred_rf_eda = rf_eda.predict(Xtec_enc)
         prob_rf_eda = rf_eda.predict_proba(Xtec_enc)[:, 1]

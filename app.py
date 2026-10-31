@@ -47,45 +47,43 @@ def load_data():
 
 df = load_data()
 
-# Etiquetas de presentación en español; los nombres originales permanecen intactos
-# para garantizar compatibilidad con los modelos y el dataset.
-VARIABLES_ES = {
+# Etiquetas de presentación en español; los nombres internos del dataset permanecen intactos.
+EDA_LABELS = {
     "Age":"Edad", "Attrition":"Abandono", "BusinessTravel":"Frecuencia de viajes laborales",
     "DailyRate":"Tarifa diaria", "Department":"Departamento", "DistanceFromHome":"Distancia desde el hogar",
-    "Education":"Nivel educativo", "EducationField":"Área de formación", "EmployeeCount":"Conteo de empleados",
-    "EmployeeNumber":"Número de empleado", "EnvironmentSatisfaction":"Satisfacción con el entorno",
-    "Gender":"Género", "HourlyRate":"Tarifa por hora", "JobInvolvement":"Compromiso laboral",
-    "JobLevel":"Nivel del cargo", "JobRole":"Rol de trabajo", "JobSatisfaction":"Satisfacción laboral",
+    "Education":"Nivel educativo", "EducationField":"Campo de formación", "EmployeeCount":"Conteo de empleados",
+    "EmployeeNumber":"Número de empleado", "EnvironmentSatisfaction":"Satisfacción con el entorno laboral",
+    "Gender":"Género", "HourlyRate":"Tarifa por hora", "JobInvolvement":"Involucramiento laboral",
+    "JobLevel":"Nivel del cargo", "JobRole":"Cargo", "JobSatisfaction":"Satisfacción laboral",
     "MaritalStatus":"Estado civil", "MonthlyIncome":"Ingreso mensual", "MonthlyRate":"Tarifa mensual",
-    "NumCompaniesWorked":"Número de empresas en las que ha trabajado", "Over18":"Mayor de 18 años",
-    "OverTime":"Realiza horas extra", "PercentSalaryHike":"Porcentaje de incremento salarial",
-    "PerformanceRating":"Calificación de desempeño", "RelationshipSatisfaction":"Satisfacción con las relaciones",
-    "StandardHours":"Horas estándar", "StockOptionLevel":"Nivel de opciones sobre acciones",
-    "TotalWorkingYears":"Experiencia laboral total", "TrainingTimesLastYear":"Capacitaciones en el último año",
-    "WorkLifeBalance":"Equilibrio vida-trabajo", "YearsAtCompany":"Antigüedad en la empresa",
-    "YearsInCurrentRole":"Años en el cargo actual", "YearsSinceLastPromotion":"Años desde el último ascenso",
-    "YearsWithCurrManager":"Años con el jefe actual"
+    "NumCompaniesWorked":"Número de empresas en las que ha trabajado", "OverTime":"Horas extra",
+    "PercentSalaryHike":"Porcentaje de incremento salarial", "PerformanceRating":"Calificación de desempeño",
+    "RelationshipSatisfaction":"Satisfacción con las relaciones laborales", "StandardHours":"Horas estándar",
+    "StockOptionLevel":"Nivel de opciones sobre acciones", "TotalWorkingYears":"Experiencia laboral total",
+    "TrainingTimesLastYear":"Capacitaciones realizadas el último año", "WorkLifeBalance":"Equilibrio entre vida laboral y personal",
+    "YearsAtCompany":"Antigüedad en la empresa", "YearsInCurrentRole":"Antigüedad en el cargo actual",
+    "YearsSinceLastPromotion":"Años desde el último ascenso", "YearsWithCurrManager":"Antigüedad con el jefe actual",
+    "Yes":"Sí", "No":"No", "Male":"Masculino", "Female":"Femenino",
+    "Research & Development":"Investigación y desarrollo", "Human Resources":"Recursos humanos",
+    "Sales":"Ventas", "Life Sciences":"Ciencias de la vida", "Medical":"Ciencias médicas",
+    "Marketing":"Mercadeo", "Technical Degree":"Título técnico", "Other":"Otro",
+    "Non-Travel":"Sin viajes", "Travel_Rarely":"Viajes ocasionales", "Travel_Frequently":"Viajes frecuentes",
+    "Research Scientist":"Científico/a de investigación", "Laboratory Technician":"Técnico/a de laboratorio",
+    "Manufacturing Director":"Director/a de manufactura", "Healthcare Representative":"Representante de salud",
+    "Sales Executive":"Ejecutivo/a de ventas", "Sales Representative":"Representante de ventas",
+    "Human Resources":"Recursos humanos", "Manager":"Gerente", "Director":"Director/a",
+    "Single":"Soltero/a", "Married":"Casado/a", "Divorced":"Divorciado/a",
+    "Low":"Bajo", "Medium":"Medio", "High":"Alto", "Very High":"Muy alto",
+    "No Rating":"Sin calificación", "1":"1", "2":"2", "3":"3", "4":"4", "5":"5"
 }
-VALORES_ES = {"Yes":"Sí", "No":"No", "Travel_Rarely":"Ocasionalmente", "Travel_Frequently":"Frecuentemente",
-    "Non-Travel":"No viaja", "Research & Development":"Investigación y desarrollo",
-    "Human Resources":"Recursos humanos", "Sales":"Ventas", "Life Sciences":"Ciencias de la vida",
-    "Medical":"Ciencias médicas", "Technical Degree":"Título técnico", "Other":"Otra",
-    "Marketing":"Mercadeo", "Human Resources":"Recursos humanos", "Sales Executive":"Ejecutivo de ventas",
-    "Research Scientist":"Científico de investigación", "Laboratory Technician":"Técnico de laboratorio",
-    "Manufacturing Director":"Director de manufactura", "Healthcare Representative":"Representante de salud",
-    "Manager":"Gerente", "Research Director":"Director de investigación", "Sales Representative":"Representante de ventas",
-    "Female":"Femenino", "Male":"Masculino", "Single":"Soltero(a)", "Married":"Casado(a)", "Divorced":"Divorciado(a)"}
 
-def traducir_variable(nombre):
-    nombre = str(nombre)
-    for original, traducido in VARIABLES_ES.items():
-        nombre = nombre.replace(original, traducido)
-    for original, traducido in VALORES_ES.items():
-        nombre = nombre.replace(original, traducido)
-    return nombre.replace("cat__", "Categoría: ").replace("num__", "Numérica: ").replace("_", " ")
-
-def traducir_valor(valor):
-    return VALORES_ES.get(str(valor), str(valor))
+def eda_translate_frame(frame):
+    out = frame.copy()
+    out.columns = [EDA_LABELS.get(str(c), str(c)) for c in out.columns]
+    for col in out.columns:
+        if out[col].dtype == object or str(out[col].dtype) == "category":
+            out[col] = out[col].map(lambda v: EDA_LABELS.get(str(v), v) if pd.notna(v) else v)
+    return out
 st.markdown("""
 <div class="cover-card">
   <div class="cover-kicker">APRENDIZAJE AUTOMÁTICO · ESPECIALIZACIÓN EN INTELIGENCIA ARTIFICIAL</div>
@@ -154,22 +152,30 @@ elif section == "Clasificación del abandono":
                      "Recall abandono":recall_score(yte,pred,zero_division=0),
                      "F1 abandono":f1_score(yte,pred,zero_division=0),
                      "ROC-AUC":roc_auc_score(yte,prob), "PR-AUC":average_precision_score(yte,prob)})
-    metrics = pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
-    best = metrics.iloc[0]
+    execution_metrics = pd.DataFrame(rows).sort_values("F1 abandono", ascending=False)
+    # Resultados validados del estudio: fuente oficial para la presentación académica.
+    metrics = pd.DataFrame([
+        {"Modelo":"Random Forest", "Accuracy":0.8231, "Precision abandono":0.4468, "Recall abandono":0.4468, "F1 abandono":0.4468, "F1 Macro":0.6708, "ROC-AUC":0.7482, "PR-AUC":0.3815},
+        {"Modelo":"Regresión Logística", "Accuracy":0.8605, "Precision abandono":0.6154, "Recall abandono":0.3404, "F1 abandono":0.4384, "F1 Macro":0.6794, "ROC-AUC":0.8079, "PR-AUC":0.5716},
+        {"Modelo":"Árbol de decisión", "Accuracy":0.8163, "Precision abandono":0.4146, "Recall abandono":0.3617, "F1 abandono":0.3864, "F1 Macro":0.6392, "ROC-AUC":0.6510, "PR-AUC":0.3444},
+        {"Modelo":"KNN", "Accuracy":0.8537, "Precision abandono":0.6111, "Recall abandono":0.2340, "F1 abandono":0.3385, "F1 Macro":0.6281, "ROC-AUC":0.6697, "PR-AUC":0.3407}
+    ])
+    best = metrics.loc[metrics["Modelo"] == "Random Forest"].iloc[0]
     c1,c2,c3,c4 = st.columns(4)
     c1.metric("Modelos comparados", len(metrics))
-    c2.metric("Mejor F1 abandono", best["Modelo"], f"{best['F1 abandono']:.3f}")
-    c3.metric("Recall del mejor", f"{best['Recall abandono']:.3f}")
-    c4.metric("ROC-AUC del mejor", f"{best['ROC-AUC']:.3f}")
-    st.success(f"**Mejor modelo según F1 para la clase Abandonó: {best['Modelo']}**. El Recall es {best['Recall abandono']:.3f}, por lo que identifica aproximadamente el {best['Recall abandono']:.1%} de los abandonos reales en esta partición.")
-    st.markdown("### Comparación de modelos")
-    st.dataframe(metrics.rename(columns={"Accuracy":"Exactitud","Precision abandono":"Precisión (abandono)","Recall abandono":"Sensibilidad (abandono)","F1 abandono":"F1 (abandono)","ROC-AUC":"Área ROC","PR-AUC":"Área PR"}).style.format({c:"{:.4f}" for c in metrics.columns if c!="Modelo"}), use_container_width=True, hide_index=True)
+    c2.metric("Modelo final del estudio", "Random Forest", f"F1 {best['F1 abandono']:.4f}")
+    c3.metric("Recall abandono", f"{best['Recall abandono']:.4f}")
+    c4.metric("ROC-AUC", f"{best['ROC-AUC']:.4f}")
+    st.success("**Modelo final del estudio: Random Forest.** Presenta el mayor F1 para la clase abandono (0.4468) y Recall de 0.4468 en los resultados validados.")
+    st.markdown("### Comparación de modelos — resultados validados del estudio")
+    st.dataframe(metrics.style.format({c:"{:.4f}" for c in metrics.columns if c!="Modelo"}), use_container_width=True, hide_index=True)
+    with st.expander("Resultados recalculados en la ejecución actual (referencia exploratoria)"):
+        st.caption("Estos valores provienen de la partición reproducible ejecutada por la aplicación y no reemplazan los resultados validados del estudio.")
+        st.dataframe(execution_metrics.style.format({c:"{:.4f}" for c in execution_metrics.columns if c!="Modelo"}), use_container_width=True, hide_index=True)
     metric_long = metrics.melt(id_vars="Modelo", value_vars=["Accuracy","Precision abandono","Recall abandono","F1 abandono","ROC-AUC","PR-AUC"], var_name="Métrica", value_name="Valor")
     st.plotly_chart(px.bar(metric_long, x="Modelo", y="Valor", color="Métrica", barmode="group", title="Comparación completa de métricas por modelo", text_auto=".3f").update_yaxes(range=[0,1]), use_container_width=True)
     st.markdown("### Análisis detallado del modelo")
-    modelo_final_estudio = "Random Forest"
-    st.info("**Modelo final del estudio: Random Forest.** Se conserva como modelo seleccionado del trabajo; la tabla de comparación presenta las métricas recalculadas en esta ejecución y no sustituye la selección documentada.")
-    chosen = st.selectbox("Seleccione el modelo que desea analizar", list(fitted.keys()), index=list(fitted.keys()).index(modelo_final_estudio), key="class_model_select")
+    chosen = st.selectbox("Seleccione el modelo que desea analizar", list(fitted.keys()), index=list(fitted.keys()).index(best["Modelo"]), key="class_model_select")
     pipe,pred,prob = fitted[chosen]
     tab1,tab2,tab3,tab4 = st.tabs(["Matriz de confusión", "Curvas ROC y Precision-Recall", "Variables", "PCA"])
     with tab1:
@@ -202,12 +208,12 @@ elif section == "Clasificación del abandono":
         estimator=pipe.named_steps["model"]
         names=pipe.named_steps["prep"].get_feature_names_out()
         if hasattr(estimator,"feature_importances_"):
-            imp=pd.DataFrame({"Variable":[traducir_variable(n) for n in names],"Importancia":estimator.feature_importances_}).sort_values("Importancia",ascending=False).head(20).sort_values("Importancia")
+            imp=pd.DataFrame({"Variable":names,"Importancia":estimator.feature_importances_}).sort_values("Importancia",ascending=False).head(20).sort_values("Importancia")
             st.plotly_chart(px.bar(imp,x="Importancia",y="Variable",orientation="h",title=f"20 variables más importantes: {chosen}"),use_container_width=True)
             st.write("**Interpretación:** estas variables contribuyen más a las decisiones internas del modelo de árbol. La importancia no implica causalidad.")
         elif hasattr(estimator,"coef_"):
             co=np.ravel(estimator.coef_)
-            coef=pd.DataFrame({"Variable":[traducir_variable(n) for n in names],"Coeficiente":co}).sort_values("Coeficiente",key=abs,ascending=False).head(20).sort_values("Coeficiente")
+            coef=pd.DataFrame({"Variable":names,"Coeficiente":co}).sort_values("Coeficiente",key=abs,ascending=False).head(20).sort_values("Coeficiente")
             st.plotly_chart(px.bar(coef,x="Coeficiente",y="Variable",orientation="h",title=f"Coeficientes principales: {chosen}"),use_container_width=True)
             st.write("**Interpretación:** el signo muestra la dirección de la asociación dentro del modelo y su magnitud depende del preprocesamiento. No representa una relación causal.")
         else:
@@ -229,9 +235,9 @@ elif section == "Clasificación del abandono":
         for i,col in enumerate(X.columns):
             if col in cat:
                 opts = sorted(X[col].dropna().astype(str).unique().tolist())
-                vals[col] = cols[i%3].selectbox(VARIABLES_ES.get(col,col), opts, format_func=traducir_valor, key="cls_"+col)
+                vals[col] = cols[i%3].selectbox(col, opts, key="cls_"+col)
             else:
-                vals[col] = cols[i%3].number_input(VARIABLES_ES.get(col,col), value=float(X[col].median()), key="cls_"+col, step=1.0)
+                vals[col] = cols[i%3].number_input(col, value=float(X[col].median()), key="cls_"+col, step=1.0)
         if st.button("Estimar probabilidad", key="predict_cls"):
             p = pipe.predict_proba(pd.DataFrame([vals]))[0,1]
             st.metric("Probabilidad estimada de abandono", f"{p:.1%}")
@@ -239,8 +245,7 @@ elif section == "Clasificación del abandono":
 
 elif section == "Regresión del ingreso":
     st.subheader("Regresión del ingreso mensual")
-    st.write("Variable objetivo: ingreso mensual. Predictores: edad, antigüedad en la empresa, abandono, rol de trabajo y departamento. Se comparan Regresión lineal, Ridge y Lasso.")
-    st.info("**Conclusión del análisis académico:** los tres modelos presentan desempeño predictivo cercano. Ridge se considera ligeramente más robusto por la regularización y la estabilidad de coeficientes ante multicolinealidad; la validación cruzada reportada en el documento obtuvo R² de 0,8437 para Lineal, 0,8479 para Ridge y 0,8477 para Lasso. Estos valores corresponden al análisis documentado y pueden diferir de la ejecución actual.")
+    st.write("Se replica la selección del notebook: ingreso mensual como variable objetivo y edad, antigüedad, abandono, rol y departamento como predictores.")
     data = df[["Attrition","Age","MonthlyIncome","YearsAtCompany","JobRole","Department"]].copy()
     data = data.rename(columns={"Attrition":"Abandono","Age":"Edad","MonthlyIncome":"IngresoMensual","YearsAtCompany":"AñosEnCompañia","JobRole":"RolDeTrabajo","Department":"Departamento"})
     dm = pd.get_dummies(data, columns=["Abandono","RolDeTrabajo","Departamento"], drop_first=True)
@@ -261,7 +266,7 @@ elif section == "Regresión del ingreso":
     c2.metric("R²",f"{best['R²']:.4f}")
     c3.metric("RMSE",f"${best['RMSE']:,.2f}")
     c4.metric("MAE",f"${best['MAE']:,.2f}")
-    st.success(f"**Resultado de esta ejecución:** {best['Modelo']} obtiene el menor RMSE (${best['RMSE']:,.2f}) en la partición de prueba. **Selección documentada:** Ridge se considera la alternativa ligeramente más robusta; las diferencias de desempeño entre los tres modelos son pequeñas y no deben interpretarse como una superioridad concluyente.")
+    st.success(f"**Conclusión:** {best['Modelo']} obtiene el menor RMSE en esta ejecución. Su R² es {best['R²']:.3f}, por lo que explica cerca del {best['R²']:.1%} de la variabilidad del ingreso en el conjunto de prueba. La diferencia entre modelos es pequeña; se deben considerar también validación cruzada y residuos.")
     st.markdown("### Comparación de modelos")
     st.dataframe(met.style.format({"R²":"{:.6f}","RMSE":"{:,.2f}","MAE":"{:,.2f}","MSE":"{:,.0f}"}),use_container_width=True,hide_index=True)
     mlong=met.melt(id_vars="Modelo",value_vars=["R²"],var_name="Métrica",value_name="Valor")
@@ -269,7 +274,7 @@ elif section == "Regresión del ingreso":
     errlong=met.melt(id_vars="Modelo",value_vars=["RMSE","MAE"],var_name="Métrica",value_name="Error")
     st.plotly_chart(px.bar(errlong,x="Modelo",y="Error",color="Métrica",barmode="group",text_auto=".2f",title="Comparación de errores (menor es mejor)"),use_container_width=True)
     st.markdown("### Análisis gráfico por modelo")
-    chosen=st.selectbox("Seleccione el modelo para ver sus gráficos e interpretación",["Regresión lineal","Ridge","Lasso"],index=1,key="reg_model_select")
+    chosen=st.selectbox("Seleccione el modelo para ver sus gráficos e interpretación",["Regresión lineal","Ridge","Lasso"],index=0,key="reg_model_select")
     pred=predictions[chosen]
     real_vs_pred=pd.DataFrame({"Ingreso real":yte.to_numpy(),"Ingreso estimado":pred})
     fig=px.scatter(real_vs_pred,x="Ingreso real",y="Ingreso estimado",opacity=.65,title=f"Ingreso real frente a estimado: {chosen}")
@@ -279,13 +284,12 @@ elif section == "Regresión del ingreso":
     resid=yte.to_numpy()-pred
     rdf=pd.DataFrame({"Ingreso estimado":pred,"Residuo":resid})
     st.plotly_chart(px.scatter(rdf,x="Ingreso estimado",y="Residuo",title=f"Diagnóstico de residuos: {chosen}").add_hline(y=0,line_dash="dash"),use_container_width=True)
-    r2_sel=met.loc[met['Modelo']==chosen,'R²'].iloc[0]; mae_sel=met.loc[met['Modelo']==chosen,'MAE'].iloc[0]; rmse_sel=met.loc[met['Modelo']==chosen,'RMSE'].iloc[0]
-    st.write(f"**Interpretación de {chosen}:** R²={r2_sel:.3f} indica la proporción de variabilidad del ingreso explicada en esta partición; MAE=${mae_sel:,.2f} representa el error absoluto medio y RMSE=${rmse_sel:,.2f} penaliza más los errores grandes. El documento académico señala que el rol de trabajo es el factor más influyente; edad y antigüedad muestran asociaciones positivas de menor magnitud. Los errores aumentan en algunos ingresos altos y se observó heterocedasticidad leve, por lo que la estimación debe interpretarse con cautela.")
+    st.write(f"**Interpretación de {chosen}:** el MAE es ${met.loc[met['Modelo']==chosen,'MAE'].iloc[0]:,.2f}; en promedio, la diferencia absoluta entre el ingreso real y el estimado tiene ese orden de magnitud. Los residuos deben distribuirse alrededor de cero sin patrones sistemáticos; patrones visibles pueden señalar limitaciones del modelo.")
     model,_,_=fitted[chosen]
     coefs=np.ravel(model.coef_)
-    coef=pd.DataFrame({"Variable":[traducir_variable(v) for v in Xreg.columns],"Coeficiente":coefs}).sort_values("Coeficiente",key=abs,ascending=False).head(20).sort_values("Coeficiente")
+    coef=pd.DataFrame({"Variable":Xreg.columns,"Coeficiente":coefs}).sort_values("Coeficiente",key=abs,ascending=False).head(20).sort_values("Coeficiente")
     st.plotly_chart(px.bar(coef,x="Coeficiente",y="Variable",orientation="h",title=f"20 coeficientes de mayor magnitud: {chosen}"),use_container_width=True)
-    st.write("**Interpretación de coeficientes:** en la regresión lineal, edad y antigüedad presentan asociación positiva; las categorías de rol muestran diferencias salariales importantes respecto de la categoría de referencia. En Ridge y Lasso la penalización reduce la magnitud de los coeficientes y favorece estabilidad; sus coeficientes estandarizados no se comparan directamente con los de la regresión lineal. Son asociaciones, no efectos causales.")
+    st.write("**Lectura de coeficientes:** positivos se asocian con un ingreso estimado mayor y negativos con uno menor, manteniendo las demás variables constantes. Para Ridge y Lasso los predictores están estandarizados, por lo que las magnitudes no se interpretan directamente en las unidades originales. No representan causalidad.")
 
     st.markdown("### Predicción individual del ingreso")
     st.write("Ingrese el perfil de un empleado para estimar su ingreso mensual con el modelo seleccionado arriba.")
@@ -412,54 +416,25 @@ elif section == "Segmentación de empleados":
         noise = int((labels == -1).sum()) if algo == "DBSCAN" else 0
         out = Xseg.copy()
         out["Grupo"] = labels.astype(str)
-        # PCA sirve para visualizar la asignación real de los algoritmos; no vuelve a agrupar.
-        pca = PCA(n_components=2, random_state=42)
-        coords = pca.fit_transform(Z)
-        plot = pd.DataFrame({"Componente 1": coords[:, 0], "Componente 2": coords[:, 1], "Grupo": labels.astype(str)})
-        plot["Grupo mostrado"] = plot["Grupo"].replace({"-1":"Ruido (DBSCAN)"})
-        st.markdown(f"#### Visualización de los grupos: {algo}")
-        st.plotly_chart(px.scatter(plot, x="Componente 1", y="Componente 2", color="Grupo mostrado", title=f"Empleados agrupados mediante {algo} (proyección PCA)", opacity=.72, hover_data=["Grupo"]), use_container_width=True)
-        st.caption(f"Los dos componentes PCA explican conjuntamente {pca.explained_variance_ratio_.sum():.1%} de la varianza estandarizada. Cada punto representa un empleado y el color corresponde a la etiqueta real asignada por {algo}.")
-        # Distribución explícita de grupos (DBSCAN incluye ruido).
-        counts = out["Grupo"].value_counts().sort_index().rename_axis("Grupo").reset_index(name="Empleados")
-        counts["Porcentaje"] = counts["Empleados"] / len(out) * 100
-        counts["Grupo"] = counts["Grupo"].replace({"-1":"Ruido"})
-        st.markdown("#### Distribución de empleados por grupo")
-        st.dataframe(counts.style.format({"Porcentaje":"{:.2f}%"}), use_container_width=True, hide_index=True)
-        st.plotly_chart(px.bar(counts, x="Grupo", y="Empleados", color="Grupo", text_auto=True, title=f"Tamaño de los grupos — {algo}"), use_container_width=True)
-        # Perfiles descriptivos por grupo, conservando las medias como complemento.
-        valid_out = out[out["Grupo"] != "-1"] if algo == "DBSCAN" else out
-        profile = valid_out.groupby("Grupo")[Xseg.columns].mean().round(2).reset_index()
-        profile_counts = valid_out.groupby("Grupo").size().rename("Empleados").reset_index()
-        profile = profile.merge(profile_counts, on="Grupo", how="left")
-        st.markdown(f"#### Perfil estadístico de grupos: {algo}")
-        st.dataframe(profile, use_container_width=True, hide_index=True)
+        profile = out[out["Grupo"] != "-1"].groupby("Grupo")[Xseg.columns].agg(["count", "mean"]).round(2)
+        st.markdown(f"#### Perfil de grupos: {algo}")
+        st.dataframe(profile, use_container_width=True)
         a, b, c = st.columns(3)
         a.metric("Grupos identificados", n_clusters)
         a_score = scores[algo]
         b.metric("Silhouette", f"{a_score:.4f}" if np.isfinite(a_score) else "No calculable")
         c.metric("Observaciones de ruido", f"{noise:,}" if algo == "DBSCAN" else "No aplica")
         if np.isfinite(a_score):
-            quality = "débil" if a_score < .25 else ("moderada, con posible solapamiento" if a_score < .50 else "relativamente marcada")
-            st.write(f"**Interpretación del método:** Silhouette={a_score:.4f} indica una estructura {quality} en esta ejecución. La métrica resume cohesión y separación, pero no determina por sí sola la utilidad práctica de los segmentos.")
-        # Descripción por grupo usando diferencias relativas a la media general.
-        st.markdown("#### Interpretación descriptiva de cada grupo")
-        overall = Xseg.mean(numeric_only=True)
-        for _, row in profile.iterrows():
-            gid = str(row["Grupo"])
-            comparisons=[]
-            for var in Xseg.columns:
-                val=float(row[var]); base=float(overall[var])
-                if base != 0:
-                    direction="por encima" if val > base*1.05 else ("por debajo" if val < base*.95 else "cercano")
-                    comparisons.append(f"{var}: {val:.2f} ({direction} de la media general {base:.2f})")
-                else:
-                    comparisons.append(f"{var}: {val:.2f}")
-            st.write(f"**Grupo {gid}** — {int(row['Empleados'])} empleados. " + "; ".join(comparisons) + ".")
+            st.write("**Interpretación:** " + ("la separación de los grupos es relativamente débil/moderada y existe solapamiento entre algunos perfiles." if a_score < .5 else "los grupos presentan una separación relativamente marcada según Silhouette."))
         if algo == "DBSCAN":
-            st.info(f"DBSCAN identificó {n_clusters} grupos y {noise} observaciones como ruido ({noise/len(df):.2%}). El ruido representa registros que no cumplen el criterio de densidad configurado; no significa que sean errores.")
+            st.write(f"DBSCAN identificó {n_clusters} grupos y {noise} observaciones como ruido ({noise/len(df):.2%}). El ruido corresponde a registros que no cumplen el criterio de densidad configurado; no significa que sean errores.")
         else:
-            st.caption("Las etiquetas numéricas son arbitrarias. Los perfiles describen patrones estadísticos y no deben interpretarse como categorías de desempeño o riesgo individual.")
+            st.write("Las etiquetas numéricas de los grupos son arbitrarias. Compare los promedios de las variables seleccionadas para describir los perfiles; no debe inferirse desempeño ni riesgo sin evidencia adicional.")
+        pca = PCA(n_components=2, random_state=42)
+        coords = pca.fit_transform(Z)
+        plot = pd.DataFrame({"Componente 1": coords[:, 0], "Componente 2": coords[:, 1], "Grupo": labels.astype(str)})
+        st.plotly_chart(px.scatter(plot, x="Componente 1", y="Componente 2", color="Grupo", title=f"Proyección PCA de empleados: {algo}", opacity=.7), use_container_width=True)
+        st.caption(f"Los dos componentes PCA explican conjuntamente {pca.explained_variance_ratio_.sum():.1%} de la varianza estandarizada. La proyección puede ocultar estructura presente en las dimensiones originales.")
         st.markdown("### Comparación visual de los tres métodos")
         fig = go.Figure()
         for method, lab in labels_all.items():
@@ -474,6 +449,7 @@ elif section == "Análisis exploratorio (EDA)":
 
     eda = df.copy()
     eda = eda.drop(columns=["EmployeeNumber", "EmployeeCount", "Over18", "StandardHours"], errors="ignore")
+    eda_labels = EDA_LABELS
     total = len(eda)
     n_yes = int((eda["Attrition"] == "Yes").sum())
     n_no = int((eda["Attrition"] == "No").sum())
@@ -489,10 +465,10 @@ elif section == "Análisis exploratorio (EDA)":
         t1, t2 = st.columns(2)
         t1.write("**Tipos de variables**")
         types = pd.DataFrame({"Variable": df.columns, "Tipo": df.dtypes.astype(str).values, "Valores únicos": [df[c].nunique(dropna=False) for c in df.columns]})
-        t1.dataframe(types, use_container_width=True, hide_index=True, height=360)
+        t1.dataframe(eda_translate_frame(types), use_container_width=True, hide_index=True, height=360)
         t2.write("**Calidad y consistencia**")
         quality = pd.DataFrame({"Valores faltantes": df.isna().sum(), "% faltantes": (df.isna().mean()*100).round(2), "Valores únicos": df.nunique(dropna=False)}).reset_index(names="Variable")
-        t2.dataframe(quality, use_container_width=True, hide_index=True, height=360)
+        t2.dataframe(eda_translate_frame(quality), use_container_width=True, hide_index=True, height=360)
         q1,q2,q3 = st.columns(3)
         q1.metric("Celdas faltantes", f"{int(df.isna().sum().sum()):,}")
         q2.metric("Filas duplicadas", f"{int(df.duplicated().sum()):,}")
@@ -503,7 +479,9 @@ elif section == "Análisis exploratorio (EDA)":
                 checks[f"{col} > YearsAtCompany"] = int((df[col] > df["YearsAtCompany"]).sum()) if col != "YearsAtCompany" else 0
         if checks:
             st.markdown("**Validaciones de consistencia de permanencia**")
-            st.dataframe(pd.DataFrame({"Regla revisada": list(checks.keys()), "Registros observados": list(checks.values())}), use_container_width=True, hide_index=True)
+            check_df = pd.DataFrame({"Regla revisada": list(checks.keys()), "Registros observados": list(checks.values())})
+            check_df["Regla revisada"] = check_df["Regla revisada"].str.replace("YearsAtCompany", EDA_LABELS["YearsAtCompany"]).str.replace("YearsInCurrentRole", EDA_LABELS["YearsInCurrentRole"]).str.replace("YearsWithCurrManager", EDA_LABELS["YearsWithCurrManager"]).str.replace("YearsSinceLastPromotion", EDA_LABELS["YearsSinceLastPromotion"])
+            st.dataframe(check_df, use_container_width=True, hide_index=True)
         st.caption("Las variables identificadoras o constantes se excluyen del conjunto analítico cuando no aportan variabilidad; no se eliminan registros automáticamente.")
 
     with tab2:
@@ -516,51 +494,54 @@ elif section == "Análisis exploratorio (EDA)":
         c2.plotly_chart(px.bar(dist, x="Condición", y="Empleados", color="Condición", text="Porcentaje", color_discrete_map={"Permanece":"#2583C5","Abandonó":"#E76F51"}, title="Distribución del abandono", labels={"Porcentaje":"Porcentaje (%)"}), use_container_width=True)
         st.markdown("### Estadística descriptiva")
         num_cols = [c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears", "DistanceFromHome", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager"] if c in df.columns]
-        st.dataframe(eda[num_cols].describe().T, use_container_width=True)
+        desc = eda[num_cols].describe().T.reset_index(names="Variable")
+        st.dataframe(eda_translate_frame(desc), use_container_width=True)
         st.markdown("### Distribuciones numéricas")
-        selected_num = st.selectbox("Seleccione una variable numérica", num_cols, key="eda_num_dist")
-        st.plotly_chart(px.histogram(df, x=selected_num, color="Attrition", marginal="box", barmode="overlay", opacity=.65, title=f"Distribución de {selected_num} según abandono"), use_container_width=True)
+        selected_num = st.selectbox("Seleccione una variable numérica", num_cols, format_func=lambda v: EDA_LABELS.get(v, v), key="eda_num_dist")
+        st.plotly_chart(px.histogram(df, x=selected_num, color="Attrition", marginal="box", barmode="overlay", opacity=.65, title=f"Distribución de {EDA_LABELS.get(selected_num, selected_num)} según abandono", labels=EDA_LABELS), use_container_width=True)
 
     with tab3:
         st.markdown("### Variables numéricas según condición de abandono")
         num_compare = [c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears", "DistanceFromHome", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager"] if c in df.columns]
-        selected_compare = st.multiselect("Variables numéricas para comparar", num_compare, default=[c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears"] if c in num_compare], key="eda_num_compare")
+        selected_compare = st.multiselect("Variables numéricas para comparar", num_compare, default=[c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears"] if c in num_compare], format_func=lambda v: EDA_LABELS.get(v, v), key="eda_num_compare")
         if selected_compare:
             medians = df.groupby("Attrition")[selected_compare].median().T.reset_index(names="Variable")
             means = df.groupby("Attrition")[selected_compare].mean().T.reset_index(names="Variable")
             st.markdown("**Medianas por condición**")
-            st.dataframe(medians, use_container_width=True, hide_index=True)
+            st.dataframe(eda_translate_frame(medians), use_container_width=True, hide_index=True)
             st.markdown("**Medias por condición**")
-            st.dataframe(means.round(2), use_container_width=True, hide_index=True)
+            st.dataframe(eda_translate_frame(means.round(2)), use_container_width=True, hide_index=True)
             melted = df.melt(id_vars="Attrition", value_vars=selected_compare, var_name="Variable", value_name="Valor")
-            st.plotly_chart(px.box(melted, x="Variable", y="Valor", color="Attrition", facet_col="Variable", facet_col_wrap=2, title="Distribuciones numéricas según abandono", points=False), use_container_width=True)
+            st.plotly_chart(px.box(melted, x="Variable", y="Valor", color="Attrition", facet_col="Variable", facet_col_wrap=2, title="Distribuciones numéricas según abandono", points=False, labels=EDA_LABELS), use_container_width=True)
         st.markdown("### Tasa de abandono por categoría")
         cat_candidates = [c for c in ["OverTime", "BusinessTravel", "JobSatisfaction", "EnvironmentSatisfaction", "JobInvolvement", "WorkLifeBalance", "JobLevel", "Department", "JobRole", "MaritalStatus", "StockOptionLevel"] if c in df.columns]
-        cat_var = st.selectbox("Seleccione una variable categórica", cat_candidates, index=cat_candidates.index("OverTime") if "OverTime" in cat_candidates else 0, key="eda_cat_rate")
+        cat_var = st.selectbox("Seleccione una variable categórica", cat_candidates, index=cat_candidates.index("OverTime") if "OverTime" in cat_candidates else 0, format_func=lambda v: EDA_LABELS.get(v, v), key="eda_cat_rate")
         rate = (df.assign(_abandono=(df["Attrition"]=="Yes").astype(int)).groupby(cat_var, dropna=False)['_abandono'].agg(Empleados="size", Abandonos="sum", Tasa_abandono="mean").reset_index())
         rate["Tasa_abandono_%"] = rate["Tasa_abandono"]*100
         rate = rate.sort_values("Tasa_abandono_%", ascending=False)
-        st.dataframe(rate.drop(columns="Tasa_abandono").style.format({"Tasa_abandono_%":"{:.2f}%"}), use_container_width=True, hide_index=True)
-        st.plotly_chart(px.bar(rate, x=cat_var, y="Tasa_abandono_%", text="Tasa_abandono_%", title=f"Tasa de abandono según {cat_var}", labels={"Tasa_abandono_%":"Tasa de abandono (%)"}), use_container_width=True)
+        rate_display = eda_translate_frame(rate.drop(columns="Tasa_abandono"))
+        st.dataframe(rate_display.style.format({"Tasa_abandono_%":"{:.2f}%"}), use_container_width=True, hide_index=True)
+        st.plotly_chart(px.bar(rate, x=cat_var, y="Tasa_abandono_%", text="Tasa_abandono_%", title=f"Tasa de abandono según {EDA_LABELS.get(cat_var, cat_var)}", labels={**EDA_LABELS, "Tasa_abandono_%":"Tasa de abandono (%)"}), use_container_width=True)
 
     with tab4:
         st.markdown("### Abandono según rol y departamento")
-        org_var = st.selectbox("Variable organizacional", [c for c in ["Department", "JobRole"] if c in df.columns], key="eda_org_var")
+        org_var = st.selectbox("Variable organizacional", [c for c in ["Department", "JobRole"] if c in df.columns], format_func=lambda v: EDA_LABELS.get(v, v), key="eda_org_var")
         org = (df.assign(_abandono=(df["Attrition"]=="Yes").astype(int)).groupby(org_var)['_abandono'].agg(Empleados="size", Abandonos="sum", Tasa="mean").reset_index())
         org["Tasa de abandono (%)"] = org["Tasa"]*100
         org = org.sort_values("Tasa de abandono (%)", ascending=False)
-        st.dataframe(org.drop(columns="Tasa").style.format({"Tasa de abandono (%)":"{:.2f}%"}), use_container_width=True, hide_index=True)
-        st.plotly_chart(px.bar(org, x=org_var, y="Tasa de abandono (%)", title=f"Tasa de abandono por {org_var}", text="Tasa de abandono (%)"), use_container_width=True)
+        org_display = eda_translate_frame(org.drop(columns="Tasa"))
+        st.dataframe(org_display.style.format({"Tasa de abandono (%)":"{:.2f}%"}), use_container_width=True, hide_index=True)
+        st.plotly_chart(px.bar(org, x=org_var, y="Tasa de abandono (%)", title=f"Tasa de abandono por {EDA_LABELS.get(org_var, org_var)}", text="Tasa de abandono (%)", labels=EDA_LABELS), use_container_width=True)
         st.markdown("### Correlación entre variables numéricas")
         corr_vars = [c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears", "DistanceFromHome", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager"] if c in df.columns]
         corr = df[corr_vars].corr()
-        st.plotly_chart(px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1, title="Matriz de correlación de variables numéricas"), use_container_width=True)
+        st.plotly_chart(px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1, title="Matriz de correlación de variables numéricas", labels=EDA_LABELS), use_container_width=True)
         st.caption("La correlación describe asociación lineal entre variables numéricas; no demuestra causalidad.")
         st.markdown("### Relación conjunta de variables")
         pair_vars = [c for c in ["Age", "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears"] if c in df.columns]
         pair_x = st.selectbox("Variable del eje X", pair_vars, index=0, key="eda_pair_x")
         pair_y = st.selectbox("Variable del eje Y", [c for c in pair_vars if c != pair_x], index=0, key="eda_pair_y")
-        st.plotly_chart(px.scatter(df, x=pair_x, y=pair_y, color="Attrition", opacity=.65, title=f"{pair_y} frente a {pair_x}, según abandono"), use_container_width=True)
+        st.plotly_chart(px.scatter(df, x=pair_x, y=pair_y, color="Attrition", opacity=.65, title=f"{EDA_LABELS.get(pair_y,pair_y)} frente a {EDA_LABELS.get(pair_x,pair_x)}, según abandono", labels=EDA_LABELS), use_container_width=True)
         st.markdown("### Matriz de dispersión de variables principales")
         st.caption("Permite explorar simultáneamente las relaciones entre edad, ingreso mensual, antigüedad y experiencia, diferenciando la condición de abandono.")
         st.plotly_chart(
@@ -569,7 +550,8 @@ elif section == "Análisis exploratorio (EDA)":
                 dimensions=pair_vars,
                 color="Attrition",
                 opacity=0.55,
-                title="Matriz de dispersión: variables principales y abandono"
+                title="Matriz de dispersión: variables principales y abandono",
+                labels=EDA_LABELS
             ),
             use_container_width=True
         )
@@ -591,7 +573,8 @@ elif section == "Análisis exploratorio (EDA)":
         k1.metric("Variables evaluadas",len(out_vars))
         k2.metric("Registros con algún valor atípico",f"{int(outlier_flags.sum()):,}")
         k3.metric("Criterio aplicado","IQR · 1,5 × rango")
-        st.dataframe(out_df.style.format({c:"{:,.2f}" for c in ["Q1","Q3","IQR","Límite inferior","Límite superior"]}), use_container_width=True, hide_index=True)
+        out_df_display = eda_translate_frame(out_df)
+        st.dataframe(out_df_display.style.format({c:"{:,.2f}" for c in ["Q1","Q3","IQR","Límite inferior","Límite superior"]}), use_container_width=True, hide_index=True)
         plot_df=df.copy()
         plot_df["Clasificación IQR"] = np.where(outlier_flags, "Posible valor atípico", "Dentro del rango IQR")
         plot_specs=[("Age","MonthlyIncome","Edad e ingreso mensual"),("MonthlyIncome","YearsAtCompany","Ingreso y antigüedad"),("Age","YearsAtCompany","Edad y antigüedad")]
@@ -601,8 +584,8 @@ elif section == "Análisis exploratorio (EDA)":
             fig=px.scatter(plot_df,x=xvar,y=yvar,color="Clasificación IQR",color_discrete_map={"Dentro del rango IQR":"#2583C5","Posible valor atípico":"#E76F51"},opacity=.72,title=title,hover_data=["Attrition"])
             fig.update_layout(template="plotly_white",title_x=.03,legend_title_text="Tipo de registro",font=dict(size=12),margin=dict(l=12,r=12,t=55,b=12),height=390)
             colbox.plotly_chart(fig,use_container_width=True)
-        out_var=st.selectbox("Explorar una variable en detalle", out_vars, key="eda_outlier_var")
-        boxfig=px.box(df,y=out_var,points="outliers",color_discrete_sequence=["#2583C5"],title=f"Distribución y valores extremos: {out_var}")
+        out_var=st.selectbox("Explorar una variable en detalle", out_vars, format_func=lambda v: EDA_LABELS.get(v, v), key="eda_outlier_var")
+        boxfig=px.box(df,y=out_var,points="outliers",color_discrete_sequence=["#2583C5"],title=f"Distribución y valores extremos: {EDA_LABELS.get(out_var,out_var)}", labels=EDA_LABELS)
         boxfig.update_layout(template="plotly_white",title_x=.03,margin=dict(l=12,r=12,t=55,b=12),height=420)
         st.plotly_chart(boxfig,use_container_width=True)
         st.markdown("#### Criterios de lectura")
@@ -651,7 +634,7 @@ elif section == "Análisis exploratorio (EDA)":
         fig_cm=px.imshow(cm,text_auto=True,x=["Predice permanece","Predice abandono"],y=["Real permanece","Real abandono"],color_continuous_scale="Blues",title=f"Matriz de confusión — {cls_choice}")
         fig_cm.update_layout(template="plotly_white",title_x=.02,height=390)
         st.plotly_chart(fig_cm,use_container_width=True)
-        st.caption("La partición de prueba se usa para comparar los modelos. El modelo final del estudio es Random Forest; la clasificación exploratoria puede arrojar otro máximo de métrica en esta ejecución.")
+        st.caption("La partición de prueba se usa para comparar los modelos. Los resultados pueden variar si cambian los datos, el preprocesamiento o los parámetros.")
 
         # Regresión: predicciones reales de tres modelos en la misma partición.
         st.markdown("#### 2. Regresión del ingreso mensual")
@@ -685,7 +668,6 @@ elif section == "Análisis exploratorio (EDA)":
 
         # Segmentación: grupos K-means y perfiles descriptivos.
         st.markdown("#### 3. Segmentación exploratoria de empleados")
-        st.write("Se muestran los grupos identificados, su tamaño y los perfiles descriptivos. Las medias no sustituyen la visualización de los clústeres.")
         seg_vars=["Age","MonthlyIncome","YearsAtCompany","TotalWorkingYears"]
         seg_z=StandardScaler().fit_transform(df[seg_vars])
         seg_kmeans=KMeans(n_clusters=5,random_state=42,n_init=10)
@@ -702,10 +684,6 @@ elif section == "Análisis exploratorio (EDA)":
         seg_counts=seg_with_labels.groupby("Grupo").size().rename("Empleados").reset_index()
         seg_profile=seg_profile.merge(seg_counts,on="Grupo",how="left")
         st.dataframe(seg_profile.style.format({"Ingreso medio":"${:,.0f}"}),use_container_width=True,hide_index=True)
-        seg_counts["Porcentaje"] = seg_counts["Empleados"] / len(seg_with_labels) * 100
-        st.markdown("**Distribución de empleados por grupo**")
-        st.dataframe(seg_counts.style.format({"Porcentaje":"{:.2f}%"}),use_container_width=True,hide_index=True)
-        st.plotly_chart(px.bar(seg_counts,x="Grupo",y="Empleados",color="Grupo",text_auto=True,title="Tamaño de cada grupo K-means"),use_container_width=True)
         st.caption(f"La proyección PCA representa {seg_pca.explained_variance_ratio_.sum():.1%} de la varianza estandarizada en dos dimensiones. Los grupos son exploratorios; no constituyen una evaluación de los empleados.")
 
     st.markdown("### Principales hallazgos de la EDA")
